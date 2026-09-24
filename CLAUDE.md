@@ -75,8 +75,15 @@ Reconcile in this order:
 Git covers the source tree only. **The local databases are not version-controlled** - a schema change is not
 recoverable from git, so check the v2 script table before assuming a database is in the state the handoff claims.
 
-Branch use: `dev` for work in progress, `staging` for pre-release, `master` for released. Commit only when the
-owner asks; never force-push a shared branch.
+### Branching and pushing (owner's standing instruction, 2026-09-24)
+
+- **All work happens on `dev`.** Check out `dev` at the start of a session and stay on it. Do not create feature
+  branches unless the owner asks.
+- **Commit and push to `dev` as you go** - you do not need to ask first. Push at every meaningful checkpoint and
+  always before ending a session, so nothing of value lives only on this machine.
+- **Never touch `staging` or `master`.** The owner merges `dev` onwards themselves. Do not merge, rebase,
+  cherry-pick or push to either, and never force-push any branch.
+- The remote is **public**: no real credential, key or connection string is ever committed.
 
 ### Update documentation during development, not at the end
 
@@ -117,7 +124,7 @@ checkpoint**. Do not try to preserve the conversation - preserve the repository.
    half-finished, say exactly that.
 7. Reconcile as above (`git status`, `git log`, build/test).
 8. Leave concrete, ordered next actions whose first item is immediately actionable.
-9. Do not commit unless the owner explicitly asks.
+9. Commit and push `dev` (see Branching and pushing above) so the checkpoint survives the session.
 
 Keep `CURRENT_STATE.md` short enough to read in a minute. When something in it becomes durable, move it into the
 document that owns it and delete it from the handoff.

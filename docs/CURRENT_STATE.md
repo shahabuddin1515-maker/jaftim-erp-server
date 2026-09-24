@@ -111,8 +111,8 @@ Only for the current objective (bulk tag/untag next):
 
 Under git since **2026-09-24**. Remote: `https://github.com/shahabuddin1515-maker/jaftim-erp-server`.
 
-- Branches `master` (default), `staging`, `dev` - all three at the same initial commit `3a688d7`
-  ("Initial commit: Jaftim ERP v2 backend"), which contains everything described in this file.
+- **Work on `dev` only.** The owner merges to `staging`/`master` themselves - see "Branching and pushing" in
+  `CLAUDE.md`. Commit and push `dev` freely; never touch the other two branches.
 - **The remote is public.** The owner was shown what that exposes (office IP allowlist CIDRs in
   `src/Jaftim.Api/appsettings.json`, the UAT/Live hostnames in `docs/DATABASE.md`, the live-defect write-ups in
   `docs/INQUIRIES.md`) and chose to publish as-is on 2026-09-24. **Never commit a real credential** - all config
