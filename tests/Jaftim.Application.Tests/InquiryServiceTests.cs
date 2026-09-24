@@ -1,8 +1,10 @@
 using Jaftim.Application.Abstractions;
 using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Inquiries;
+using Jaftim.Application.Modules.Notifications;
 using Jaftim.Domain.Entities.Inquiries;
 using Jaftim.Domain.Exceptions;
+using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Jaftim.Application.Tests;
 
@@ -62,14 +64,95 @@ public sealed class InquiryServiceTests
             service.LogInteractionAsync(99, new LogInteractionRequest("", null, null)));
     }
 
+    [Fact]
+    public async Task Single_tag_refuses_an_unlinked_inquiry_and_notifies_the_agent_about_the_party()
+    {
+        var unlinked = new InquiryRepoFake { Item = new InquiryListItem { InquiryId = 7, UserProfileId = null } };
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Build(unlinked, out _, out _).TagToAgentAsync(7, 5));
+        Assert.Empty(unlinked.Tagged);                 // never reaches the procedure (it would tag a NULL customer)
+
+        var linked = new InquiryRepoFake { Item = new InquiryListItem { InquiryId = 7, UserProfileId = 99 } };
+        IInquiryService service = Build(linked, out AuditSpy audit, out _, out NotifySpy notify);
+        await service.TagToAgentAsync(7, 5);
+
+        Assert.Equal([(7L, 5L)], linked.Tagged);
+        Assert.Single(audit.Actions, a => a == "Inquiry.TaggedToAgent");
+        NotificationRequest sent = Assert.Single(notify.Sent);
+        Assert.Equal((NotificationTypeCodes.CustomerTagged, (long?)99), (sent.TypeCode, sent.EntityId));
+        Assert.Equal([5L], sent.RecipientUserIds!);
+    }
+
+    [Fact]
+    public async Task Bulk_tag_dedupes_by_inquiry_and_counts_unlinked_or_invisible_rows_as_failed()
+    {
+        var repo = new InquiryRepoFake();
+        repo.ById[1] = new InquiryListItem { InquiryId = 1, UserProfileId = 11 };
+        repo.ById[2] = new InquiryListItem { InquiryId = 2, UserProfileId = null };   // not linked to a party
+        repo.ById[3] = new InquiryListItem { InquiryId = 3, UserProfileId = 33 };     // 4: the caller may not see it
+        IInquiryService service = Build(repo, out _, out _, out NotifySpy notify);
+
+        BulkTagResult result = await service.TagBulkAsync(new InquiryBulkTagRequest(5, [1, 1, 2, 3, 4, 0, -1]));
+
+        Assert.Equal(new BulkTagResult(4, 2, 2, "2 of 4 inquiries tagged successfully. 2 could not be tagged."), result);
+        Assert.Equal([(1L, 5L), (3L, 5L)], repo.Tagged);
+        Assert.Equal([11L, 33L], notify.Sent.Select(n => n.EntityId!.Value));
+    }
+
+    [Fact]
+    public async Task Bulk_tag_fails_only_when_nothing_succeeded_and_an_outage_is_not_disguised_as_a_rejection()
+    {
+        var none = new InquiryRepoFake();
+        none.ById[2] = new InquiryListItem { InquiryId = 2, UserProfileId = null };
+        await Assert.ThrowsAsync<BusinessRuleException>(() => Build(none, out _, out _).TagBulkAsync(new InquiryBulkTagRequest(5, [2, 4])));
+
+        var down = new InquiryRepoFake { Item = new InquiryListItem { InquiryId = 1, UserProfileId = 11 }, TagFault = new TimeoutException("db down") };
+        await Assert.ThrowsAsync<TimeoutException>(() => Build(down, out _, out _).TagBulkAsync(new InquiryBulkTagRequest(5, [1])));
+
+        var ok = new InquiryRepoFake { Item = new InquiryListItem { InquiryId = 1, UserProfileId = 11 } };
+        BulkTagResult single = await Build(ok, out _, out _).TagBulkAsync(new InquiryBulkTagRequest(5, [1]));
+        Assert.Equal("1 inquiry tagged successfully.", single.Message);
+
+        await Assert.ThrowsAsync<Domain.Exceptions.ValidationException>(() => Build(ok, out _, out _).TagBulkAsync(new InquiryBulkTagRequest(0, [1])));
+        await Assert.ThrowsAsync<Domain.Exceptions.ValidationException>(() => Build(ok, out _, out _).TagBulkAsync(new InquiryBulkTagRequest(5, [0])));
+    }
+
+    [Fact]
+    public async Task Bulk_untag_is_keyed_on_the_customer_agent_pair_so_rows_sharing_a_customer_collapse()
+    {
+        var repo = new InquiryRepoFake();
+        IInquiryService service = Build(repo, out AuditSpy audit, out _, out NotifySpy notify);
+
+        BulkTagResult result = await service.UntagBulkAsync(new InquiryBulkUntagRequest(
+            [new(11, 5), new(11, 5), new(11, 6), new(12, 5), new(0, 5), new(13, 0)]));
+
+        Assert.Equal(new BulkTagResult(3, 3, 0, "3 customers untagged successfully."), result);
+        Assert.Equal([(11L, 5L), (11L, 6L), (12L, 5L)], repo.Untagged);
+        Assert.Equal(3, audit.Actions.Count(a => a == "Customer.UntaggedFromAgent"));
+        Assert.All(notify.Sent, n => Assert.Equal(NotificationTypeCodes.CustomerUntagged, n.TypeCode));
+
+        await Assert.ThrowsAsync<Domain.Exceptions.ValidationException>(() =>
+            service.UntagBulkAsync(new InquiryBulkUntagRequest([new(0, 5)])));
+    }
+
     private static readonly DateTime FixedNow = new(2026, 9, 23, 10, 0, 0, DateTimeKind.Utc);
 
-    private static IInquiryService Build(InquiryRepoFake repo, out AuditSpy audit, out PartySpy party)
+    private static IInquiryService Build(InquiryRepoFake repo, out AuditSpy audit, out PartySpy party) =>
+        Build(repo, out audit, out party, out _);
+
+    private static IInquiryService Build(InquiryRepoFake repo, out AuditSpy audit, out PartySpy party, out NotifySpy notify)
     {
         audit = new AuditSpy();
         party = new PartySpy();
-        return new InquiryService(repo, party, audit, new FixedClock(),
-            new InquiryListRequestValidator(), new InquiryContactStatusRequestValidator(), new LogInteractionRequestValidator());
+        notify = new NotifySpy();
+        return new InquiryService(repo, party, audit, new FixedClock(), notify, NullLogger<InquiryService>.Instance,
+            new InquiryListRequestValidator(), new InquiryContactStatusRequestValidator(), new LogInteractionRequestValidator(),
+            new InquiryBulkTagRequestValidator(), new InquiryBulkUntagRequestValidator());
+    }
+
+    private sealed class NotifySpy : INotificationDispatcher
+    {
+        public List<NotificationRequest> Sent { get; } = [];
+        public Task NotifyAsync(NotificationRequest request, CancellationToken ct = default) { Sent.Add(request); return Task.CompletedTask; }
     }
 
     private sealed class FixedClock : IDateTimeProvider { public DateTime UtcNow => FixedNow; }
@@ -93,6 +176,11 @@ public sealed class InquiryServiceTests
     private sealed class InquiryRepoFake : IInquiryRepository
     {
         public InquiryListItem? Item { get; init; }
+        /// <summary>Per-inquiry rows for multi-row tests; an id missing here is one the caller may not see.</summary>
+        public Dictionary<long, InquiryListItem> ById { get; } = [];
+        public Exception? TagFault { get; init; }
+        public List<(long Inquiry, long Agent)> Tagged { get; } = [];
+        public List<(long Customer, long Agent)> Untagged { get; } = [];
         public InquiryListRequest? LastRequest { get; private set; }
         public (long Inquiry, long Party, int Status)? SavedContactStatus { get; private set; }
         public DateTime? LoggedAt { get; private set; }
@@ -100,7 +188,8 @@ public sealed class InquiryServiceTests
         public Task<PagedResult<InquiryListItem>> GetAllAsync(InquiryListRequest request, CancellationToken ct = default)
         {
             LastRequest = request;
-            IReadOnlyList<InquiryListItem> items = Item is null ? [] : [Item];
+            InquiryListItem? row = Item ?? (request.InquiryId is int id && ById.TryGetValue(id, out InquiryListItem? found) ? found : null);
+            IReadOnlyList<InquiryListItem> items = row is null ? [] : [row];
             return Task.FromResult(new PagedResult<InquiryListItem>(items, request.Page, request.PageSize, items.Count));
         }
         public Task<IReadOnlyList<InquirySectionValue>> GetSectionsAsync(long inquiryId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<InquirySectionValue>>([]);
@@ -108,7 +197,14 @@ public sealed class InquiryServiceTests
         public Task<IReadOnlyList<InquiryListItem>> GetByPartyAsync(long userProfileId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<InquiryListItem>>([]);
         public Task SaveContactStatusAsync(long inquiryId, long userProfileId, int statusId, string? remarks, CancellationToken ct = default)
         { SavedContactStatus = (inquiryId, userProfileId, statusId); return Task.CompletedTask; }
-        public Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default) => Task.CompletedTask;
+        public Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default)
+        {
+            if (TagFault is not null) throw TagFault;
+            Tagged.Add((inquiryId, agentId));
+            return Task.CompletedTask;
+        }
+        public Task UntagCustomerFromAgentAsync(long customerId, long agentId, CancellationToken ct = default)
+        { Untagged.Add((customerId, agentId)); return Task.CompletedTask; }
         public Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<CustomerInteraction>>([]);
         public Task LogInteractionAsync(long userProfileId, LogInteractionRequest request, DateTime contactedTimeUtc, CancellationToken ct = default)
         { LoggedAt = contactedTimeUtc; return Task.CompletedTask; }
@@ -186,6 +282,7 @@ public sealed class PartyServiceTests
         public Task<IReadOnlyList<InquiryListItem>> GetByPartyAsync(long userProfileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task SaveContactStatusAsync(long inquiryId, long userProfileId, int statusId, string? remarks, CancellationToken ct = default) => throw new NotSupportedException();
         public Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default) => throw new NotSupportedException();
+        public Task UntagCustomerFromAgentAsync(long customerId, long agentId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task LogInteractionAsync(long userProfileId, LogInteractionRequest request, DateTime contactedTimeUtc, CancellationToken ct = default) => throw new NotSupportedException();
     }

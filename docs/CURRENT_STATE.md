@@ -1,6 +1,6 @@
 # Current Development State
 
-Last updated: 2026-09-24 (repo placed under git and published the same day - see Working Tree / Git Context)
+Last updated: 2026-09-24 (bulk tag/untag ported)
 
 > Handoff only. This file is **not** authoritative over code, tests, the database or the other docs - if it
 > disagrees with them, they win and this file is stale. Permanent knowledge belongs in the documents listed in
@@ -13,30 +13,29 @@ from the leftovers listed there.
 
 ## Current Objective
 
-Finish the remaining Module 3 surface. The inquiry **read** path and the inquiry **add/update** path are complete;
-what is left is bulk import, bulk tag/untag, the `CustomerTagging` screens, and the public/lead-facing endpoints.
+Finish the remaining Module 3 surface. Inquiry read, add/update, single tag and bulk tag/untag are complete; what
+is left is the `CustomerTagging` screens, bulk import, and the public endpoint.
 
 No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
-- **Inquiry add path** (2026-09-23): `POST /api/inquiries`, `PUT /api/inquiries/{id}`,
-  `GET /api/inquiries/check-email`, `GET /api/inquiries/check-phone`. `InquirySave` + the `AspNetUsers` login +
-  `CustomerSave` + the `Inquiry.UserProfileId` link run in **one transaction**.
-- **`database/v2/006_CustomerSave_InquiryGuard.sql`** - repairs the legacy defect that rejected every new enquirer
-  (see Important Recent Discoveries). Applied to both local tenants.
-- Earlier in Module 3: inquiry list/detail, party classification (`UserProfile.PartyKind`, `database/v2/005`),
-  party sections/inquiries/interactions, contact-status, single tag, `PartyKindSyncJob`.
+- **Bulk tag/untag** (2026-09-24): `POST /api/inquiries/tag-bulk`, `/untag-bulk` (perm 550). Loops the single-row
+  procedures, dedupes (tag by inquiry, untag by customer+agent), partial success, 422 only when nothing succeeded.
+  The single-row `POST /api/inquiries/{id}/tag` now also sends `CUSTOMER_TAGGED` (it was missing) and refuses an
+  inquiry with no party. Contract and v2 departures: `docs/INQUIRIES.md` → "Tagging"; new defect 4 there.
+- **Inquiry add path** (2026-09-23) and `database/v2/006` (the `CustomerSave` guard repair).
+- Earlier in Module 3: inquiry list/detail, party classification (`database/v2/005`), party
+  sections/inquiries/interactions, contact-status, `PartyKindSyncJob`.
 
 ## Work In Progress
 
-Nothing is half-implemented. The next items have not been started:
+Nothing is half-implemented. Not started:
 
 | Not started | Legacy source | Notes |
 |---|---|---|
-| `POST /api/inquiries/tag-bulk`, `/untag-bulk` | `InquiryController.TaggedFromInquiriesBulk` / `UnTagFromInquiriesBulk` | **No bulk procedure exists** - the legacy actions loop in C#, and tag/untag are keyed differently. Contract documented in `docs/INQUIRIES.md` → "Tagging, and why bulk tag and bulk untag are not symmetric". Smallest next unit. |
+| `CustomerTaggingController.*` | same | Procedures exist: `CustomerTagging_GetAllManagerAgent`, `_AgentTaggedCustomer`, `_AgentUnTaggedCustomerHistory`, `_AvailableCustomers`, `_TagCustomerToAgent`, `_UnTagCustomerFromAgent`. Reuse `IInquiryRepository.UntagCustomerFromAgentAsync` and the notification shapes in `InquiryService`. |
 | `POST /api/inquiries/bulk` | `InquiryController.BulkInquirySave` | `BulkInquiryImport_V2` (TVP) exists; wants a Hangfire job with progress. |
-| `CustomerTaggingController.*` | same | Procedures exist: `CustomerTagging_GetAllManagerAgent`, `_AgentTaggedCustomer`, `_AgentUnTaggedCustomerHistory`, `_AvailableCustomers`, `_TagCustomerToAgent`, `_UnTagCustomerFromAgent`. |
 | `POST /api/public/inquiries` | `PublicController.InquirySave` | Anonymous; needs a captcha/rate-limit decision. |
 
 **Explicitly not scheduled:** porting the `JaftimWebhooks` Azure Function / lead ingestion. Owner instruction
@@ -46,81 +45,66 @@ Nothing is half-implemented. The next items have not been started:
 
 Verified on 2026-09-24 in this repository:
 
-- `dotnet build` - **succeeds, no warnings, no errors**.
-- `dotnet test` - **69 passing** (60 `Jaftim.Application.Tests` + 9 `Jaftim.Api.Tests`), 0 failing, 0 skipped.
-- Local databases: `v2/001`-`006` present in **both** `jaftim-local-db` and `jaftim-local-db2`; the `v2/006` guard
-  fix confirmed in both. Catalog has 2 active tenants (`jaftim`, `acme`), 1360 accounts, 2720 memberships.
-- UAT audited read-only: **no v2 objects, nothing modified**, `CustomerSave` still unpatched there.
-
-Verified on 2026-09-23 by running the API locally (not re-run since; no code has changed since):
-
-- The five inquiry-create scenarios in `docs/GETTING_STARTED.md` section 4, including the 422 rollback leaving
-  **zero** new rows across `Inquiry`/`AspNetUsers`/`UserProfile`.
+- `dotnet build` - **no warnings, no errors**. `dotnet test` - **73 passing** (64 Application + 9 Api), 0 failing.
+- Local databases: `v2/001`-`006` present in both `jaftim-local-db` and `jaftim-local-db2`; the `v2/006` patch
+  marker confirmed in `CustomerSave` in both.
+- **Bulk tag/untag run against the local API, tenant `jaftim`:** partial tag (2 of 3, unlinked inquiry 1488
+  failed as 404), all-unlinked → 422, agent 0 → 400, untag with a duplicate pair → 2 calls, invalid untag → 400.
+  Confirmed in the database: `CustomerTagging` rows, `Inquiry.AssignedTo`, 4 `AuditLog` rows, notifications to the
+  agent (+ System Admins, by the type's `IncludeSystemAdmins`). **All test rows were deleted afterwards** and
+  `AssignedTo` restored to NULL (baselines: `CustomerTagging` max 265, `Notification` max 94, `AuditLog` max 40).
 
 Not verified / no coverage:
 
-- No integration test hits a real database - every test uses hand-rolled fakes. The transactional create path in
-  `InquirySaveRepository.SaveAsync` is therefore covered only by the manual run above. Re-run it after touching
-  that method.
-- `jaftim-local-db2` has never had an inquiry created against it (the manual run used tenant `jaftim` only).
+- No integration test hits a real database - every test uses fakes. `InquirySaveRepository.SaveAsync`'s
+  transaction and the bulk tag procedure calls are covered only by the manual runs above.
+- `jaftim-local-db2` has never had an inquiry created or tagged against it.
+- The outage-rethrow branch of bulk tag is unit-tested only (not provoked against a real database).
 
 ## Open Questions / Blockers
 
-No blockers. Two decisions are owed by the owner/product, but neither blocks the next action:
+No blockers. Owed by the owner/product, not blocking:
 
-1. **Promoting `database/v2/006` to UAT/Live.** It also fixes the legacy app's own add-inquiry screen. Until it is
-   promoted, every new enquirer added on UAT/Live still fails. Promotion is an owner-authorised release step.
-2. 12 roles have zero `RoleActionMapping` rows, so they are locked out of the API (deny-by-default). Seed before
-   go-live - query in `docs/DATABASE.md`.
+1. **Promoting `database/v2/006` to UAT/Live** - until then every new enquirer added on UAT/Live still fails.
+2. 12 roles have zero `RoleActionMapping` rows, so they are locked out of the API. Seed before go-live
+   (query in `docs/DATABASE.md`).
 
 ## Important Recent Discoveries
 
-Both have already been written into permanent docs; kept here only because they are recent and change how the next
-session should behave. Delete from this file once they are no longer "recent".
+Already in the permanent docs; delete from here once no longer recent.
 
-1. **`CustomerSave` rejects every new enquirer, live on UAT today.** Its duplicate-phone guard promises in a
-   comment to exclude `@InquiryId` and never does, so the just-inserted inquiry matches itself. The legacy screen
-   hides it in `catch (Exception ex) { return null; }`, leaving an orphan inquiry + login and no party. Fixed for
-   v2 by `database/v2/006`. Full write-up: `docs/INQUIRIES.md` defect 0. **This is the one approved exception to
-   the additive-only rule** (`docs/DATABASE.md` rule 1) - do not treat it as a precedent without asking.
-2. **Error-message casing distinguishes the two procedures**: `InquirySave` raises "Duplicate **I**nquiry...",
-   `CustomerSave` raises "Duplicate **i**nquiry...". Useful when a 422 could come from either.
+1. `Inquiry_TaggedFromInquiries` and `CustomerTagging_UnTagCustomerFromAgent` **always** return "Ok" - the legacy
+   "failed" count could only ever come from an exception. An unlinked inquiry gets a NULL-customer tag
+   (`docs/INQUIRIES.md` defect 4, `REWRITE_PLAN.md` §7).
+2. `GetInquiryAll` does not return unlinked inquiries (observed for 1488), so `GET /api/inquiries/{id}` is 404 for
+   them - worth remembering when a "missing" inquiry is reported.
+3. `CustomerSave` rejected every new enquirer (fixed by `v2/006`; `docs/INQUIRIES.md` defect 0) - the one approved
+   exception to additive-only.
 
 ## Relevant Files
 
-Only for the current objective (bulk tag/untag next):
+For the next objective (`CustomerTaggingController`):
 
-- `src/Jaftim.Api/Controllers/InquiriesController.cs` - where the bulk endpoints go; `TagToAgent` is the pattern.
-- `src/Jaftim.Application/Modules/Inquiries/InquiryContracts.cs` - `IInquiryService` / `IInquiryRepository`.
-- `src/Jaftim.Infrastructure/Repositories/InquiryRepository.cs` - `TagToAgentAsync` is the single-row call.
-- `docs/INQUIRIES.md` - the tagging contract and the Customer/Contact model.
-- `C:\jaftimv2\Jaftim\Jaftim\Controllers\InquiryController.cs` lines ~432-520 - the legacy bulk actions.
+- `C:\jaftimv2\Jaftim\Jaftim\Controllers\CustomerTaggingController.cs` - the legacy actions.
+- `src/Jaftim.Application/Modules/Inquiries/InquiryContracts.cs` - `InquiryService` tag/untag + notifications.
+- `src/Jaftim.Infrastructure/Repositories/InquiryRepository.cs` - the tag/untag procedure calls.
+- `docs/MIGRATION_INVENTORY.md` Module 3 row for the planned `/api/tagging/*` routes and permissions 526/550-553.
 
 ## Next Actions
 
-1. **Port bulk tag/untag** - `POST /api/inquiries/tag-bulk` and `/untag-bulk`, permission 550, following the
-   contract in `docs/INQUIRIES.md` (loop the single-row procedures, dedupe, partial success with `tagged`/`failed`
-   counts, 400 only when nothing succeeded, `CUSTOMER_TAGGED`/`CUSTOMER_UNTAGGED` notifications). Add service
-   tests for the dedupe and partial-failure branches. Tick the row in `docs/MIGRATION_INVENTORY.md`.
-2. Port `CustomerTaggingController` (the six `CustomerTagging_*` procedures above).
-3. Port bulk inquiry import as a Hangfire job over `BulkInquiryImport_V2` (TVP) with progress.
-4. Decide captcha/rate-limiting, then port `POST /api/public/inquiries`.
-5. Then Module 2 leftovers (user sections/stocks/image, entities/hierarchy/org-chart) or Module 4, owner's choice.
+1. **Port `CustomerTaggingController`** - `GET /api/tagging/agents`, `/agents/{id}/customers`,
+   `/agents/{id}/history`, `/available-customers`; `POST /api/tagging/tag`, `/untag` (the six `CustomerTagging_*`
+   procedures). Read the legacy controller first to confirm the permission per action (inventory says 526/550-553)
+   and reuse the tag/untag notification shapes. Consider moving tagging into its own service at that point.
+2. Port bulk inquiry import as a Hangfire job over `BulkInquiryImport_V2` (TVP) with progress.
+3. Decide captcha/rate-limiting, then port `POST /api/public/inquiries`.
+4. Then Module 2 leftovers (user sections/stocks/image, entities/hierarchy/org-chart) or Module 4, owner's choice.
 
 ## Working Tree / Git Context
 
-Under git since **2026-09-24**. Remote: `https://github.com/shahabuddin1515-maker/jaftim-erp-server`.
+Under git since 2026-09-24. Remote: `https://github.com/shahabuddin1515-maker/jaftim-erp-server` (**public**).
+Work on `dev` only; the owner merges to `staging`/`master` - see "Branching and pushing" in `CLAUDE.md`. Never
+commit a real credential (`docs/GETTING_STARTED.md`).
 
-- **Work on `dev` only.** The owner merges to `staging`/`master` themselves - see "Branching and pushing" in
-  `CLAUDE.md`. Commit and push `dev` freely; never touch the other two branches.
-- **The remote is public.** The owner was shown what that exposes (office IP allowlist CIDRs in
-  `src/Jaftim.Api/appsettings.json`, the UAT/Live hostnames in `docs/DATABASE.md`, the live-defect write-ups in
-  `docs/INQUIRIES.md`) and chose to publish as-is on 2026-09-24. **Never commit a real credential** - all config
-  secrets are empty placeholders and must stay that way (`docs/GETTING_STARTED.md`).
-- No work is uncommitted as of the initial commit; run `git status` to confirm nothing has drifted since.
-
-Caveat that git does not cover: **the local databases are not version-controlled.** A v2 script applied to
-`jaftim-local-db` / `jaftim-local-db2` cannot be recovered or rolled back from git. Check the script table in
-`docs/DATABASE.md` against the databases before assuming they match this handoff.
-
-The legacy reference repo `C:\jaftimv2\Jaftim` is **not** a git repository - it has no history to inspect.
+The local databases are not version-controlled: check the script table in `docs/DATABASE.md` against them before
+trusting this handoff. The legacy reference repo `C:\jaftimv2\Jaftim` is not a git repository.

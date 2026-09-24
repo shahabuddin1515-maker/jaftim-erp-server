@@ -77,8 +77,8 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 | `ContactList`, `ContactAdd` (CustomerContact log) | `GET/POST /api/parties/{id}/interactions` - named "interaction" because it is a touchpoint log, not a party | 103/608 | done |
 | `CustomerController.ContactStatus` | `POST /api/inquiries/{id}/contact-status` (`Inquiry_ContactStatusSave`; appends `CustomerRemarks` history, refreshes the cached latest values, then re-qualifies the party) | 608 | done |
 | `CustomerController.Contacted` | - | - | drop (superseded by contact status, README 6.3) |
-| `TaggedFromInquiries` | `POST /api/inquiries/{id}/tag` (`Inquiry_TaggedFromInquiries`, audited) | 550 | done |
-| `TaggedFromInquiriesBulk`, `UnTagFromInquiriesBulk` | `POST /api/inquiries/tag-bulk`, `/untag-bulk` | 550 | todo |
+| `TaggedFromInquiries` | `POST /api/inquiries/{id}/tag` (`Inquiry_TaggedFromInquiries`, audited, `CUSTOMER_TAGGED`; 422 for an unlinked inquiry) | 550 | done |
+| `TaggedFromInquiriesBulk`, `UnTagFromInquiriesBulk` | `POST /api/inquiries/tag-bulk`, `/untag-bulk` - loops the single-row procedures, partial success, 422 only when nothing succeeded (`docs/INQUIRIES.md` "Tagging") | 550 | done |
 | `CustomerTaggingController.*` | `GET /api/tagging/agents`, `/agents/{id}/customers`, `/agents/{id}/history`, `/available-customers`; `POST /api/tagging/tag`, `/untag` (+ notifications CUSTOMER_TAGGED/UNTAGGED) | 526/550-553 | todo |
 | `JaftimWebhooks` Function `POST /api/leads` | **Do not port without the owner's say-so.** Standing instruction (2026-09-23): the Azure Function keeps running as-is on its own connection string, and the whole ingestion chain (`InsertLead` -> `InquiryImport_FromLead` -> `InquirySave_FromLead` -> `CustomerSaveInternal`) stays untouched - `docs/INQUIRIES.md`, "Inbound leads are not handled here". A v2 `POST /api/public/leads` (bearer key vs `AuthorizationKeys`) is a *possible future* alternative, not queued work. | key | **not scheduled (owner constraint)** |
 | `PublicController.InquirySave` | `POST /api/public/inquiries` (crypto-random password) | anonymous + captcha/rate limit | todo |

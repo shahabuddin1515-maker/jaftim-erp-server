@@ -68,6 +68,12 @@ public sealed class InquiryRepository(IDbExecutor db) : IInquiryRepository
                 .With("@agentId", agentId)
                 .With("@inquiryId", inquiryId), ct);
 
+    public Task UntagCustomerFromAgentAsync(long customerId, long agentId, CancellationToken ct = default) =>
+        db.ExecuteAsync(
+            SpCall.Procedure("CustomerTagging_UnTagCustomerFromAgent")
+                .With("@customerId", customerId)
+                .With("@agentId", agentId), ct);
+
     public Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default) =>
         db.QueryAsync<CustomerInteraction>(SpCall.Procedure("CustomerContact_GetByCustomerId").With("@CustomerId", userProfileId), ct);
 

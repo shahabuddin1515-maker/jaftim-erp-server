@@ -72,7 +72,7 @@ So `GET /api/inquiries` rows carry both: the inquiry fields, plus `userProfileId
 
 Steps 4-6 run in **one transaction** (`IDbExecutor.InTransactionAsync`). The legacy action ran them unwrapped and
 ended in `catch (Exception ex) { return null; }`, so a rejection at step 5 left the inquiry and the login committed
-with no party behind them. See defect 4 below - that is not a hypothetical path, it is what happens on UAT today.
+with no party behind them. See defect 0 below - that is not a hypothetical path, it is what happens on UAT today.
 
 `POST /api/inquiries` returns `{ inquiryId, userProfileId, partyKind, partyCreated }`, so the caller knows whether
 the enquirer was new and what they were classified as. Rejections from the procedures surface as **422**
@@ -94,7 +94,8 @@ not sign in through this back-office API, so nothing waits on it.
 | `GET /api/inquiries` | paged list; filters incl. `partyKind=Contact\|Customer`, `isTagged`, `isContacted`, `agentId`, `sourceId`, `countryId`, `dateFrom/To`, `followUpStatus` | 538 |
 | `GET /api/inquiries/{id}` | one inquiry (fetched through the list, so row visibility still applies -> 404, never someone else's row) | 537 |
 | `POST /api/inquiries/{id}/contact-status` | record a contact attempt; appends history to `CustomerRemarks`, refreshes the cached latest status/remark, then re-qualifies the party | 608 |
-| `POST /api/inquiries/{id}/tag` | tag the inquiry's party to an agent | 550 |
+| `POST /api/inquiries/{id}/tag` | tag the inquiry's party to an agent (422 if the inquiry has no party) | 550 |
+| `POST /api/inquiries/tag-bulk` · `untag-bulk` | bulk tag by inquiry / bulk untag by (customer, agent); partial success - see Tagging below | 550 |
 | `GET /api/parties/{id}/kind` · `PUT .../kind` · `POST .../kind/refresh` | read / pin / re-apply the classification | 103, 523 |
 | `GET /api/parties/{id}/inquiries` | every inquiry this party raised | 546 |
 | `GET /api/parties/{id}/sections` | party detail tabs (`Contact_GetSectionById`) | 106 |
@@ -105,23 +106,48 @@ inquiries tagged to them, RoleId 12 (CSD Manager) their reporting subtree, every
 
 ## Tagging, and why bulk tag and bulk untag are not symmetric
 
-Not yet ported (`docs/MIGRATION_INVENTORY.md` Module 3). Recorded here because it is not derivable from the
-procedure names, and **there is no bulk stored procedure** - the legacy actions loop in C#
-(`InquiryController.TaggedFromInquiriesBulk` / `UnTagFromInquiriesBulk`):
+Ported 2026-09-24 as `POST /api/inquiries/tag-bulk` / `/untag-bulk`. Recorded here because it is not derivable
+from the procedure names, and **there is no bulk stored procedure** - the legacy actions loop in C#
+(`InquiryController.TaggedFromInquiriesBulk` / `UnTagFromInquiriesBulk`), and so does v2:
 
 | | Bulk **tag** | Bulk **untag** |
 |---|---|---|
 | Keyed on | the **inquiry** | the **(customer, agent)** pair - *not* the inquiry |
 | Deduped by | `InquiryId` | `(CustomerId, AgentId)`, so selected rows sharing a customer collapse into one call |
 | Calls, per item | `Inquiry_TaggedFromInquiries(agentId, inquiryId)` | `CustomerTagging_UnTagCustomerFromAgent(customerId, agentId)` |
-| Success test | the procedure returns the string `"Ok"` | same |
+| Success test (legacy) | the procedure returns `"Ok"` - which it always does, see below | same |
 | Notification per success | `CUSTOMER_TAGGED` (only when `CustomerId > 0`) | `CUSTOMER_UNTAGGED` |
 
 The asymmetry is deliberate: an agent is tagged to a **customer**, so untagging is a property of the party, while
 tagging is driven from the inquiry row the user selected. Both actions are **partially successful by design** -
 they count `tagged`/`failed`, return `"N of M ... successfully"`, and only fail the request (400) when *nothing*
-succeeded. A v2 port should keep that contract (a 207-style body) rather than making the batch atomic, or the
-screen's behaviour changes.
+succeeded. v2 keeps that contract (200 with `requested`/`succeeded`/`failed`/`message`) rather than making the
+batch atomic, or the screen's behaviour changes.
+
+What v2 does differently, and why:
+
+- **"Nothing succeeded" is 422, not the legacy 400.** v2 uses 400 only for malformed input (no agent, no valid
+  id - the validator), and 422 when a well-formed request is rejected (`ApiExceptionHandler`).
+- **"Ok" is not the success test.** Both procedures end in an unconditional `SELECT 'Ok'`, so the legacy
+  `failed` count could only ever come from an exception. v2 counts an item as failed when it throws. If *nothing*
+  succeeded and a failure was not an expected rejection (a DB fault rather than a 404/422), that fault is rethrown
+  so an outage is a 500, not "none could be tagged".
+- **Bulk tag resolves the party on the server.** The client sends only `inquiryIds`; each item goes through the
+  single-row tag, so row visibility (`GetInquiryAll`), the audit row and the notification apply per item.
+- **An unlinked inquiry is never tagged** (defect 4 below). In practice `GetInquiryAll` does not return
+  unlinked inquiries at all (verified locally for inquiry 1488), so they fail as 404 before the explicit guard is
+  reached; the guard stays as a second line.
+- **The single-row `POST /api/inquiries/{id}/tag` now sends `CUSTOMER_TAGGED`**, as the legacy action did; the
+  first v2 port had omitted it.
+- **Untag still notifies when nothing was untagged.** `CustomerTagging_UnTagCustomerFromAgent` reports "Ok" even
+  when no active (customer, agent) row matched, and the legacy action notified regardless. v2 preserves this;
+  a pre-check would need a per-pair query no procedure provides.
+
+Recipients: `Notification_Create` adds active System Admins (role 10) on top of the agent because the type has
+`IncludeSystemAdmins` set - `UseRoleMap = false` does not suppress that. Observed on the local run (agent + 4
+admins per notification), identical to legacy. `CustomerTagging.AgentId` is a `UserProfileId` (which is what
+notification recipients are keyed by), but 84 of the 265 local rows point at no `UserProfile` - legacy data,
+left alone.
 
 ## Inbound leads are not handled here
 
@@ -177,3 +203,8 @@ Nothing below was silently absorbed: each is either documented and left alone, o
    `CountryId`, `LeadStatusId` and joins on `AspNetUserId`. v2 adds the missing ones (non-filtered on purpose: a
    filtered index would force `QUOTED_IDENTIFIER ON` on every writer, and 57 modules are still compiled with it
    OFF - see `docs/DATABASE.md`, which owns that count).
+4. **`Inquiry_TaggedFromInquiries` tags a NULL customer for an unlinked inquiry.** It resolves the customer via
+   `Inquiry.AspNetUserId -> UserProfile`; when that finds nothing, `@CustomerId` is NULL, and because
+   `CustomerTagging.CustomerId` is nullable it inserts an active tag for no one, sets `Inquiry.AssignedTo`, and
+   returns "Ok". 0 such rows exist locally today, and 111 of 1 192 local inquiries are unlinked. v2 refuses to tag
+   an inquiry without a party (422) and never calls the procedure for it; the procedure is unchanged.

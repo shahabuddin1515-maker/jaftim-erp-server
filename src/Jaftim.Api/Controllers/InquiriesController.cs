@@ -72,7 +72,31 @@ public sealed class InquiriesController(IInquiryService inquiries, IInquirySaveS
     public async Task<ActionResult<ApiResponse<InquiryListItem>>> SaveContactStatus(long inquiryId, [FromBody] InquiryContactStatusRequest request, CancellationToken ct) =>
         Ok(await inquiries.SaveContactStatusAsync(inquiryId, request, ct), "Contact status saved.");
 
-    /// <summary>Tags the inquiry's party to an agent (`Inquiry_TaggedFromInquiries`).</summary>
+    /// <summary>
+    /// Tags the parties of several inquiries to one agent. Partially successful by design: 200 with
+    /// succeeded/failed counts; 422 only when none could be tagged. Unlinked or invisible inquiries count as failed.
+    /// </summary>
+    [HttpPost("tag-bulk")]
+    [HasPermission(Permissions.CustomerTagging)]
+    public async Task<ActionResult<ApiResponse<BulkTagResult>>> TagBulk([FromBody] InquiryBulkTagRequest request, CancellationToken ct)
+    {
+        BulkTagResult result = await inquiries.TagBulkAsync(request, ct);
+        return Ok(result, result.Message);
+    }
+
+    /// <summary>
+    /// Untags (customer, agent) pairs - keyed on the party, not the inquiry, so rows sharing a customer collapse into
+    /// one call. Same partial-success contract as tag-bulk.
+    /// </summary>
+    [HttpPost("untag-bulk")]
+    [HasPermission(Permissions.CustomerTagging)]
+    public async Task<ActionResult<ApiResponse<BulkTagResult>>> UntagBulk([FromBody] InquiryBulkUntagRequest request, CancellationToken ct)
+    {
+        BulkTagResult result = await inquiries.UntagBulkAsync(request, ct);
+        return Ok(result, result.Message);
+    }
+
+    /// <summary>Tags the inquiry's party to an agent (`Inquiry_TaggedFromInquiries`). 422 if the inquiry has no party yet.</summary>
     [HttpPost("{inquiryId:long}/tag")]
     [HasPermission(Permissions.CustomerTagging)]
     public async Task<ActionResult<ApiResponse<object?>>> TagToAgent(long inquiryId, [FromBody] TagInquiryRequest request, CancellationToken ct)

@@ -1,8 +1,10 @@
 using FluentValidation;
 using Jaftim.Application.Abstractions;
 using Jaftim.Application.Common;
+using Jaftim.Application.Modules.Notifications;
 using Jaftim.Domain.Entities.Inquiries;
 using Jaftim.Domain.Exceptions;
+using Microsoft.Extensions.Logging;
 
 namespace Jaftim.Application.Modules.Inquiries;
 
@@ -73,6 +75,46 @@ public sealed class LogInteractionRequestValidator : AbstractValidator<LogIntera
     }
 }
 
+/// <summary>
+/// Bulk tag (legacy TaggedFromInquiriesBulk). Keyed on the inquiry; the party is resolved server-side, so unlike the
+/// legacy request the client does not send a CustomerId per row.
+/// </summary>
+public sealed record InquiryBulkTagRequest(long AgentId, IReadOnlyList<long>? InquiryIds);
+
+/// <summary>
+/// Bulk untag (legacy UnTagFromInquiriesBulk). Keyed on the (customer, agent) pair, NOT the inquiry - see
+/// docs/INQUIRIES.md "Tagging, and why bulk tag and bulk untag are not symmetric".
+/// </summary>
+public sealed record InquiryBulkUntagRequest(IReadOnlyList<InquiryBulkUntagItem>? Items);
+
+public sealed record InquiryBulkUntagItem(long CustomerId, long AgentId);
+
+/// <summary>Outcome of a bulk tag/untag. Partial success is the contract: only "nothing succeeded" fails the request.</summary>
+public sealed record BulkTagResult(int Requested, int Succeeded, int Failed, string Message);
+
+public sealed class InquiryBulkTagRequestValidator : AbstractValidator<InquiryBulkTagRequest>
+{
+    public const int MaxItems = 1000;
+
+    public InquiryBulkTagRequestValidator()
+    {
+        RuleFor(x => x.AgentId).GreaterThan(0).WithMessage("Please select an agent to tag the selected inquiries to.");
+        RuleFor(x => x.InquiryIds).Must(ids => ids is not null && ids.Any(id => id > 0))
+            .WithMessage("Please select at least one inquiry to tag.");
+        RuleFor(x => x.InquiryIds!.Count).LessThanOrEqualTo(MaxItems).When(x => x.InquiryIds is not null).WithName("inquiryIds");
+    }
+}
+
+public sealed class InquiryBulkUntagRequestValidator : AbstractValidator<InquiryBulkUntagRequest>
+{
+    public InquiryBulkUntagRequestValidator()
+    {
+        RuleFor(x => x.Items).Must(items => items is not null && items.Any(i => i.CustomerId > 0 && i.AgentId > 0))
+            .WithMessage("None of the selected inquiries are currently tagged to an agent.");
+        RuleFor(x => x.Items!.Count).LessThanOrEqualTo(InquiryBulkTagRequestValidator.MaxItems).When(x => x.Items is not null).WithName("items");
+    }
+}
+
 public interface IInquiryRepository
 {
     /// <summary>EXEC GetInquiryAll - page rows then the total count.</summary>
@@ -87,6 +129,8 @@ public interface IInquiryRepository
     Task SaveContactStatusAsync(long inquiryId, long userProfileId, int statusId, string? remarks, CancellationToken ct = default);
     /// <summary>EXEC Inquiry_TaggedFromInquiries - tag the inquiry's party to an agent.</summary>
     Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default);
+    /// <summary>EXEC CustomerTagging_UnTagCustomerFromAgent - deactivates the (customer, agent) tag, if any.</summary>
+    Task UntagCustomerFromAgentAsync(long customerId, long agentId, CancellationToken ct = default);
     /// <summary>EXEC CustomerContact_GetByCustomerId / CustomerContact_Save (the interaction log).</summary>
     Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default);
     Task LogInteractionAsync(long userProfileId, LogInteractionRequest request, DateTime contactedTimeUtc, CancellationToken ct = default);
@@ -108,6 +152,8 @@ public interface IInquiryService
     Task<IReadOnlyList<InquiryListItem>> GetByPartyAsync(long userProfileId, CancellationToken ct = default);
     Task<InquiryListItem> SaveContactStatusAsync(long inquiryId, InquiryContactStatusRequest request, CancellationToken ct = default);
     Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default);
+    Task<BulkTagResult> TagBulkAsync(InquiryBulkTagRequest request, CancellationToken ct = default);
+    Task<BulkTagResult> UntagBulkAsync(InquiryBulkUntagRequest request, CancellationToken ct = default);
     Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default);
     Task<IReadOnlyList<CustomerInteraction>> LogInteractionAsync(long userProfileId, LogInteractionRequest request, CancellationToken ct = default);
 }
@@ -117,9 +163,13 @@ public sealed class InquiryService(
     IPartyService parties,
     IAuditWriter audit,
     IDateTimeProvider clock,
+    INotificationDispatcher notifications,
+    ILogger<InquiryService> logger,
     IValidator<InquiryListRequest> listValidator,
     IValidator<InquiryContactStatusRequest> contactStatusValidator,
-    IValidator<LogInteractionRequest> interactionValidator) : IInquiryService
+    IValidator<LogInteractionRequest> interactionValidator,
+    IValidator<InquiryBulkTagRequest> bulkTagValidator,
+    IValidator<InquiryBulkUntagRequest> bulkUntagValidator) : IInquiryService
 {
     public async Task<PagedResult<InquiryListItem>> GetAllAsync(InquiryListRequest request, CancellationToken ct = default)
     {
@@ -176,12 +226,113 @@ public sealed class InquiryService(
         return after;
     }
 
+    /// <summary>
+    /// An agent is tagged to the inquiry's PARTY. An unlinked inquiry is refused: Inquiry_TaggedFromInquiries would
+    /// otherwise insert a CustomerTagging row with a NULL CustomerId (the column is nullable) and report "Ok".
+    /// </summary>
     public async Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default)
     {
+        if (agentId <= 0)
+            throw new Domain.Exceptions.ValidationException(new Dictionary<string, string[]> { ["agentId"] = ["Please select an agent."] });
+
         InquiryListItem before = await GetByIdAsync(inquiryId, ct);
+        if (before.UserProfileId is not { } partyId)
+            throw new BusinessRuleException("This inquiry is not linked to a party yet, so it cannot be tagged to an agent.");
+
         await repository.TagToAgentAsync(inquiryId, agentId, ct);
         await audit.RecordAsync("Inquiry.TaggedToAgent", "Inquiry", inquiryId,
             new { before.TaggedAgentId, before.Tagged }, new { TaggedAgentId = agentId }, ct);
+
+        // Legacy NotificationDispatcher.CustomerTagged; the URL is the legacy screen's, which still reads this table.
+        await notifications.NotifyAsync(new NotificationRequest(
+            NotificationTypeCodes.CustomerTagged,
+            Message: "A customer has been tagged to you.",
+            EntityType: "Customer", EntityId: partyId,
+            Url: $"/Customer/CustomerDetail?userId={partyId}",
+            RecipientUserIds: [agentId], UseRoleMap: false), ct);
+    }
+
+    /// <summary>
+    /// Legacy TaggedFromInquiriesBulk: one single-row tag per distinct inquiry, partially successful by design. Each
+    /// item goes through <see cref="TagToAgentAsync"/>, so visibility (404), the unlinked-party guard, the audit row
+    /// and the notification all apply per item.
+    /// </summary>
+    public async Task<BulkTagResult> TagBulkAsync(InquiryBulkTagRequest request, CancellationToken ct = default)
+    {
+        await bulkTagValidator.ValidateAndThrowAppAsync(request, ct);
+        long[] inquiryIds = request.InquiryIds!.Where(id => id > 0).Distinct().ToArray();
+
+        (int succeeded, int failed) = await RunEachAsync(inquiryIds, id => TagToAgentAsync(id, request.AgentId, ct),
+            id => $"inquiry {id}", ct);
+
+        if (succeeded == 0)
+            throw new BusinessRuleException("None of the selected inquiries could be tagged.");
+        string message = failed == 0
+            ? $"{succeeded} {(succeeded == 1 ? "inquiry" : "inquiries")} tagged successfully."
+            : $"{succeeded} of {inquiryIds.Length} inquiries tagged successfully. {failed} could not be tagged.";
+        return new BulkTagResult(inquiryIds.Length, succeeded, failed, message);
+    }
+
+    /// <summary>
+    /// Legacy UnTagFromInquiriesBulk: keyed on (customer, agent), so selected rows sharing a customer collapse into one
+    /// call. Like the legacy action, the procedure reports "Ok" even when no active tag matched, and the agent is
+    /// still notified - v2 has no cheap per-pair existence check to do better.
+    /// </summary>
+    public async Task<BulkTagResult> UntagBulkAsync(InquiryBulkUntagRequest request, CancellationToken ct = default)
+    {
+        await bulkUntagValidator.ValidateAndThrowAppAsync(request, ct);
+        InquiryBulkUntagItem[] pairs = request.Items!.Where(i => i.CustomerId > 0 && i.AgentId > 0).Distinct().ToArray();
+
+        (int succeeded, int failed) = await RunEachAsync(pairs, async pair =>
+        {
+            await repository.UntagCustomerFromAgentAsync(pair.CustomerId, pair.AgentId, ct);
+            await audit.RecordAsync("Customer.UntaggedFromAgent", "UserProfile", pair.CustomerId,
+                new { TaggedAgentId = pair.AgentId }, new { TaggedAgentId = (long?)null }, ct);
+            await notifications.NotifyAsync(new NotificationRequest(
+                NotificationTypeCodes.CustomerUntagged,
+                Message: "A customer has been untagged from you.",
+                EntityType: "Customer", EntityId: pair.CustomerId,
+                Url: null,   // the agent no longer has access to the customer profile
+                RecipientUserIds: [pair.AgentId], UseRoleMap: false), ct);
+        }, pair => $"customer {pair.CustomerId} / agent {pair.AgentId}", ct);
+
+        if (succeeded == 0)
+            throw new BusinessRuleException("None of the selected inquiries could be untagged.");
+        string message = failed == 0
+            ? $"{succeeded} {(succeeded == 1 ? "customer" : "customers")} untagged successfully."
+            : $"{succeeded} of {pairs.Length} customers untagged successfully. {failed} could not be untagged.";
+        return new BulkTagResult(pairs.Length, succeeded, failed, message);
+    }
+
+    /// <summary>
+    /// Runs every item, counting failures instead of stopping. When nothing succeeded and at least one failure was not
+    /// an expected per-item rejection (an <see cref="AppException"/>), that fault is rethrown so an outage surfaces as
+    /// a 500 rather than as "none could be tagged".
+    /// </summary>
+    private async Task<(int Succeeded, int Failed)> RunEachAsync<T>(IReadOnlyList<T> items, Func<T, Task> action, Func<T, string> describe, CancellationToken ct)
+    {
+        int succeeded = 0, failed = 0;
+        Exception? unexpected = null;
+        foreach (T item in items)
+        {
+            ct.ThrowIfCancellationRequested();
+            try
+            {
+                await action(item);
+                succeeded++;
+            }
+            catch (Exception ex) when (ex is not OperationCanceledException)
+            {
+                failed++;
+                if (ex is not AppException)
+                    unexpected = ex;
+                logger.LogWarning(ex, "Bulk tag/untag failed for {Item}", describe(item));
+            }
+        }
+
+        if (succeeded == 0 && unexpected is not null)
+            System.Runtime.ExceptionServices.ExceptionDispatchInfo.Throw(unexpected);
+        return (succeeded, failed);
     }
 
     public Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default) =>

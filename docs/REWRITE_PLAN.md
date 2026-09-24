@@ -209,6 +209,7 @@ From README section 24; each needs an explicit product decision before its modul
 | `ApproveBidManager` tautological WHERE, unreachable from UI | 5 | do not expose |
 | `Leads.LeadId` never written to `Inquiry.LeadId` | 3 | preserve - flag to product |
 | `CustomerSave`'s duplicate-phone guard never excludes `@InquiryId`, so **every** new enquirer added through the back-office form is rejected after the `Inquiry` row and login have already committed (no party is created). Live on UAT; the legacy screen hides it in `catch { return null; }` | 3 | **fixed** in `database/v2/006` - the one approved exception to additive-only. Full write-up: `docs/INQUIRIES.md` defect 0 |
+| `Inquiry_TaggedFromInquiries` inserts an active `CustomerTagging` row with a NULL `CustomerId` when the inquiry has no party, and still returns "Ok" | 3 | refuse in the service (422 / counted as failed in bulk); SP unchanged. `docs/INQUIRIES.md` defect 4 |
 | `Inquiry_GetSectionById` selects from `Base_InquiryType`, which does not exist in any environment - it can never have worked | 3 | do not expose; `GET /api/inquiries/{id}` returns the fields instead |
 | 8 stocks fail `StockStatus_RefreshOne` (`RefreshCustomerStatus` NULL `FK_CustomerId`) | 5 | preserve - flag to product (see `docs/MIGRATION_INVENTORY.md`) |
 | `RoleActionMapping` covers only 10 of 22 roles (12 roles have **zero** actions) | 2 | seed before go-live, or those roles cannot use the API at all (deny by default) |
