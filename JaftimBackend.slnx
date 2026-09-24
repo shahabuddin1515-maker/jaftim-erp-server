@@ -1,0 +1,16 @@
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="src/Jaftim.Api/Jaftim.Api.csproj" />
+    <Project Path="src/Jaftim.Application/Jaftim.Application.csproj" />
+    <Project Path="src/Jaftim.Domain/Jaftim.Domain.csproj" />
+    <Project Path="src/Jaftim.Infrastructure/Jaftim.Infrastructure.csproj" />
+    <Project Path="src/Jaftim.Jobs/Jaftim.Jobs.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/Jaftim.Api.Tests/Jaftim.Api.Tests.csproj" />
+    <Project Path="tests/Jaftim.Application.Tests/Jaftim.Application.Tests.csproj" />
+  </Folder>
+  <Folder Name="/tools/">
+    <Project Path="tools/HashPassword/HashPassword.csproj" />
+  </Folder>
+</Solution>

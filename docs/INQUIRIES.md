@@ -1,0 +1,179 @@
+# Inquiries, parties, and the Customer/Contact distinction
+
+## The three things the word "contact" used to mean
+
+The legacy system overloads one word. v2 names them apart:
+
+| v2 name | What it is | Where it lives |
+|---|---|---|
+| **Party** | a person/organisation with the customer role - a **Contact** while unqualified, a **Customer** once qualified | `UserProfile` (RoleId 3) + `UserProfileDetail` |
+| **Inquiry** | an enquiry **event** ("I want this car"), with a snapshot of the enquirer's details as received | `Inquiry` |
+| **Interaction** | a **touchpoint log** entry ("we called / WhatsApp'd / e-mailed them") | `CustomerContact` |
+
+## Customer vs Contact
+
+A **Contact** is an unqualified, lead-stage party; a **Customer** is a qualified one. "Qualified" is the rule the
+legacy code applies - a real name, a validly-shaped e-mail, and a phone:
+
+```
+unqualified  <=>  FullName = 'N/A'  OR  Email IS NULL  OR  Email NOT LIKE '%_@_%._%'
+                  OR Phone IS NULL  OR  LTRIM(RTRIM(Phone)) = ''
+```
+
+Most contacts come from the lead / Respond.io pipeline, which sets the e-mail to the phone digits when no real
+address was supplied - so they fail the e-mail shape test by construction. On the reference data: **242 customers,
+778 contacts**.
+
+> The legacy `README.md` §4 describes `UserProfile.IsContact` as "a secondary contact person under a business
+> customer". That is **wrong**: no such column exists in the database, and the flag is the data-quality expression
+> above, re-computed inside `CustomerProfileGetById`, `GetCustomerAllNew` and `GetInquiryAll`. `GetCustomerAllNew`
+> hides `IsContact = 1`, which is why leads never show up in the Customers list.
+
+### What v2 changed
+
+The expression became **`UserProfile.PartyKind`** (`1 = Contact`, `2 = Customer`) - stored, indexed, defined once
+(`database/v2/005_PartyKind_And_Inquiry.sql`):
+
+- **Stored and indexed**, so "show me all contacts" is a seek instead of a non-SARGable string test in three places.
+- **Auto-maintained**: the API re-applies the rule after its own writes; `PartyKindSyncJob` (every 5 min, per tenant)
+  catches everything written by the lead pipeline, Respond.io and the legacy app.
+- **Overridable**: `PartyKindIsManual` pins a human decision ("this IS a customer, we just have no e-mail"); the rule
+  then leaves the row alone until the pin is released.
+- **Qualification is an event**: crossing Contact -> Customer writes `Customer.Qualified` to `AuditLog`, with
+  `PartyQualifiedAtUtc` recording when it first happened.
+
+The legacy `CASE` expressions are untouched, so every existing screen and report keeps its current numbers. Verified:
+0 mismatches between the stored column and the legacy rule across all customer-role parties.
+
+## Snapshot vs current truth
+
+An inquiry keeps the details **as received**; the party holds **current** truth. They legitimately differ:
+
+```
+Inquiry 393 : FullName "__sheby", Email "676765568"      <- pseudo-email at lead time
+Party 12620 : FullName "__sheby", Email "nnsgjkjk@gmail.com", Phone 255676765568 -> PartyKind = Customer
+```
+
+So `GET /api/inquiries` rows carry both: the inquiry fields, plus `userProfileId` and `isContact` for the party.
+
+## Adding an inquiry
+
+`POST /api/inquiries` reproduces the legacy `InquiryController.InquirySave` sequence:
+
+1. force `RoleId = 3` (Customer) and `StatusId = 2` (Active);
+2. `phone := countryCode + phone`;
+3. **`email := the supplied address, or the phone digits with the '+' stripped`**, and `username := email`. This
+   is the "EmailNotRequired" rule, and it is what decides Contact vs Customer: a phone-only enquiry produces a
+   party whose e-mail is not an e-mail, which fails the qualification test;
+4. `EXEC InquirySave` - matches an existing party by e-mail / username / any phone field, rejects an enquiry whose
+   e-mail and phone belong to two *different* customers, then inserts the `Inquiry` row;
+5. **only when that created a new inquiry that matched nobody**: create the `AspNetUsers` login and `EXEC CustomerSave`;
+6. set `Inquiry.UserProfileId`, then re-apply the qualification rule.
+
+Steps 4-6 run in **one transaction** (`IDbExecutor.InTransactionAsync`). The legacy action ran them unwrapped and
+ended in `catch (Exception ex) { return null; }`, so a rejection at step 5 left the inquiry and the login committed
+with no party behind them. See defect 4 below - that is not a hypothetical path, it is what happens on UAT today.
+
+`POST /api/inquiries` returns `{ inquiryId, userProfileId, partyKind, partyCreated }`, so the caller knows whether
+the enquirer was new and what they were classified as. Rejections from the procedures surface as **422**
+(`Duplicate Inquiry exists with same Phone.`, `Email and Phone found in different customers.`); a missing or
+malformed phone is a **400** from the validator, before the database is touched.
+
+Two departures from legacy, both deliberate: the hardcoded shared password (`"2342343&"`, in source control, the
+same for every customer ever created) is replaced by a per-party random one, and errors are reported rather than
+swallowed. The catalog `Account` for the new party is created by `AccountSyncJob` on its next pass - customers do
+not sign in through this back-office API, so nothing waits on it.
+
+## Endpoints
+
+| Endpoint | Purpose | Perm |
+|---|---|---|
+| `POST /api/inquiries` | add an inquiry; matches or creates the party and its login, in one transaction | 539 |
+| `PUT /api/inquiries/{id}` | update an inquiry (the procedure only changes name, status, role, gender, country, customer type, ad link) | 539 |
+| `GET /api/inquiries/check-email` · `check-phone` | is this enquirer already known? (legacy `CheckEmail`/`CheckPhone` probes on the add form) | 539 |
+| `GET /api/inquiries` | paged list; filters incl. `partyKind=Contact\|Customer`, `isTagged`, `isContacted`, `agentId`, `sourceId`, `countryId`, `dateFrom/To`, `followUpStatus` | 538 |
+| `GET /api/inquiries/{id}` | one inquiry (fetched through the list, so row visibility still applies -> 404, never someone else's row) | 537 |
+| `POST /api/inquiries/{id}/contact-status` | record a contact attempt; appends history to `CustomerRemarks`, refreshes the cached latest status/remark, then re-qualifies the party | 608 |
+| `POST /api/inquiries/{id}/tag` | tag the inquiry's party to an agent | 550 |
+| `GET /api/parties/{id}/kind` · `PUT .../kind` · `POST .../kind/refresh` | read / pin / re-apply the classification | 103, 523 |
+| `GET /api/parties/{id}/inquiries` | every inquiry this party raised | 546 |
+| `GET /api/parties/{id}/sections` | party detail tabs (`Contact_GetSectionById`) | 106 |
+| `GET /api/parties/{id}/interactions` · `POST` | the interaction log | 103, 608 |
+
+**Row-level visibility is unchanged** and still lives in `GetInquiryAll`: RoleId 2 (Sales Executive) sees only
+inquiries tagged to them, RoleId 12 (CSD Manager) their reporting subtree, everyone else all rows.
+
+## Tagging, and why bulk tag and bulk untag are not symmetric
+
+Not yet ported (`docs/MIGRATION_INVENTORY.md` Module 3). Recorded here because it is not derivable from the
+procedure names, and **there is no bulk stored procedure** - the legacy actions loop in C#
+(`InquiryController.TaggedFromInquiriesBulk` / `UnTagFromInquiriesBulk`):
+
+| | Bulk **tag** | Bulk **untag** |
+|---|---|---|
+| Keyed on | the **inquiry** | the **(customer, agent)** pair - *not* the inquiry |
+| Deduped by | `InquiryId` | `(CustomerId, AgentId)`, so selected rows sharing a customer collapse into one call |
+| Calls, per item | `Inquiry_TaggedFromInquiries(agentId, inquiryId)` | `CustomerTagging_UnTagCustomerFromAgent(customerId, agentId)` |
+| Success test | the procedure returns the string `"Ok"` | same |
+| Notification per success | `CUSTOMER_TAGGED` (only when `CustomerId > 0`) | `CUSTOMER_UNTAGGED` |
+
+The asymmetry is deliberate: an agent is tagged to a **customer**, so untagging is a property of the party, while
+tagging is driven from the inquiry row the user selected. Both actions are **partially successful by design** -
+they count `tagged`/`failed`, return `"N of M ... successfully"`, and only fail the request (400) when *nothing*
+succeeded. A v2 port should keep that contract (a 207-style body) rather than making the batch atomic, or the
+screen's behaviour changes.
+
+## Inbound leads are not handled here
+
+`JaftimWebhooks` (the Azure Function) keeps receiving `POST /api/leads` and calling `InsertLead` directly on its own
+connection string. Nothing in this backend touches that chain
+(`InsertLead` -> `InquiryImport_FromLead` -> `InquirySave_FromLead` -> `CustomerSaveInternal`), and no v2 script
+alters those procedures. New parties and inquiries therefore appear without the API's involvement; the reconciliation
+job is what keeps `PartyKind` and `Inquiry.UserProfileId` correct for them.
+
+## Legacy defects found here
+
+Nothing below was silently absorbed: each is either documented and left alone, or repaired by a named script.
+
+0. **`CustomerSave` rejects every new enquirer** - *repaired*, `database/v2/006_CustomerSave_InquiryGuard.sql`.
+   `CustomerSave` carries a guard whose own comment reads "Exclude `@InquiryId` when converting that same inquiry
+   into a customer" - but the predicate never excludes it:
+
+   ```sql
+   IF EXISTS (SELECT 1 FROM dbo.Inquiry I
+              WHERE ISNULL(I.IsDeleted, 0) = 0
+                AND (ISNULL(@UserProfileId, 0) = 0)          -- no  AND I.InquiryId <> @InquiryId
+                AND (@Phone IN (I.Phone, I.SecondaryPhone, I.WhatsAppNumber) OR ...))
+       RAISERROR('Duplicate inquiry exists with same Phone.', 16, 1)
+   ```
+
+   The add-inquiry flow is `InquirySave` (inserts the row) -> create the login -> `CustomerSave` (`@InquiryId` =
+   that row), so the guard always finds the enquiry against itself and aborts. **On UAT today the `Inquiry` row and
+   the `AspNetUsers` login are committed and no party is ever created**; the screen shows a generic failure because
+   the action ends in `catch (Exception ex) { return null; }`. Verified on UAT by reading `OBJECT_DEFINITION`
+   (guard active, procedure last modified 2026-09-08).
+
+   The v2 script adds the missing `AND I.InquiryId <> ISNULL(@InquiryId, 0)`, restoring the intent the comment
+   already states. The guard still fires for a phone that belongs to a *different* active inquiry, so the
+   protection it was added for is kept. It patches whatever definition is deployed (rather than restating the
+   180-line body) and refuses to run if it cannot find exactly one occurrence, so it is safe to re-run and cannot
+   silently revert an unrelated change.
+
+   Note that source control's copy - `Jaftim/Database/Database Scripts/CustomerSave.sql` - instead has the whole
+   block **commented out**, dropping the protection entirely. That version was never deployed. The two definitions
+   are otherwise byte-identical.
+
+   The lead-ingestion chain is unaffected: it uses `CustomerSaveInternal`, which has no such guard. That is why
+   inbound leads do get parties while the back-office add form does not.
+
+1. **`Inquiry_GetSectionById` can never have worked** - it selects from `Base_InquiryType`, a table that does not
+   exist (confirmed on UAT; exactly one procedure references it). The inquiry-sections endpoint is therefore not
+   exposed; `GET /api/inquiries/{id}` returns the inquiry's fields in full instead.
+2. **`Inquiry.LeadId` is never written.** `LeadId` is threaded through the whole ingestion chain but omitted from
+   `InquirySave_FromLead`'s INSERT column list, so every lead-sourced inquiry has `LeadId = NULL` (0 of 1 455 rows
+   are linked). v2 does not invent the link. Fixing it means editing an ingestion procedure the Azure Function
+   depends on - a product decision.
+3. **`Inquiry` had two indexes** (PK + `RI_ContactId`) while the list screen filters on `CreatedAt`, `SourceId`,
+   `CountryId`, `LeadStatusId` and joins on `AspNetUserId`. v2 adds the missing ones (non-filtered on purpose: a
+   filtered index would force `QUOTED_IDENTIFIER ON` on every writer, and 57 modules are still compiled with it
+   OFF - see `docs/DATABASE.md`, which owns that count).

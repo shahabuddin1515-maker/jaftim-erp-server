@@ -1,0 +1,22 @@
+bin/
+obj/
+*.user
+*.suo
+.vs/
+.vscode/
+TestResults/
+*.swp
+.idea/
+*.DotSettings.user
+
+# Secrets never belong in this repo - real values live in dotnet user-secrets,
+# App Service settings or Key Vault (docs/GETTING_STARTED.md).
+appsettings.*.local.json
+appsettings.Local.json
+secrets.json
+*.pfx
+*.p12
+
+# Database exports (large, and full of production data)
+*.bacpac
+*.dacpac

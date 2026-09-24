@@ -1,0 +1,159 @@
+ActionId|ActionName|ActionCssClass|Mvc|ActionParentId|ActionIdentification|DependantId
+--------|----------|--------------|---|--------------|--------------------|-----------
+1|Auth|_CSS_1|/|0|1|0
+2|Auth Table|_CSS_2|/authfilter/getdllauthtablevalues|1|1|0
+3|Auth Data|_CSS_3|/authfilter/getauthdata|1|1|0
+100|Customer|_CSS_100|/|0|1|0
+101|Customer Listing|_CSS_101|/customer/customergetall|100|1|0
+102|Customer Create|_CSS_102|/customer/customersave|100|1|0
+103|Customer Detail|_CSS_103|/customer/customerdetail|100|1|0
+104|Customer Stock Allocation|_CSS_104|/customer/stockallocationbycustomer|103|1|0
+105|Customer Stock Allocation History|_CSS_105|/customer/stockallocationhistorySave|103|1|0
+106|Customer Section|_CSS_106|/customer/customersectiongetbyid|100|1|0
+200|Employee|_CSS_200|/|0|1|0
+201|Employee Listing|_CSS_201|/user/usergetall|200|1|0
+202|Employee Create|_CSS_202|/user/usersave|200|1|0
+203|Employee Detail|_CSS_203|/user/userdetail|201|1|0
+204|Employee Section|_CSS_204|/user/employeesectiongetbyid|201|1|0
+300|Role|_CSS_300|/|0|1|0
+301|Role Listing|_CSS_301|/user/rolesgetall|300|1|0
+302|Role Save/Edit|_CSS_302|/user/rolesave|300|1|0
+304|Assign Roles|_CSS_304|/user/assignroles|300|1|0
+400|Stock|_CSS_400|/|0|1|0
+401|Stock Edit|_CSS_401|/stock/stockdetailsave|413|1|0
+402|Stock Feature|_CSS_402|/stock/stockfeaturesave|413|1|0
+403|Stock File|_CSS_403|/stock/stockdocumentsbyfolderid|413|1|0
+404|Stock Reservation|_CSS_404|/stock/stockreservationdetailsave|413|1|0
+405|Stock Status|_CSS_405|/stock/stockstatussave|413|1|0
+406|Stock Refund|_CSS_406|/stock/stockrefundsave|413|1|0
+407|Stock Financial|_CSS_407|/stock/stockfinancialsave|416|1|0
+408|Stock Inspection|_CSS_408|/stock/stockinspectionsave|413|1|0
+409|Stock File Upload|_CSS_409|/stock/stockfilesave|403|1|0
+410|Stock Sections|_CSS_410|/stock/stocksectiongetbyid|413|1|0
+411|Stock Port|_CSS_411|/stock/stockportdetailsave|413|1|0
+412|Stock BL|_CSS_412|/stock/stockbldetailsave|413|1|0
+413|Stock Detail|_CSS_413|/stock/stockdetail|400|1|0
+414|Stock Note|_CSS_414|/stock/stockinternalnotegetbyid|413|1|0
+415|Stock Note Save/Edit|_CSS_415|/stock/stockinternalnotesave|414|1|0
+416|Stock Financials|_CSS_416|/stock/stockfinancialgetallbystockid|413|1|0
+417|Stock Listing|_CSS_417|/stock|400|1|0
+418|Stock Shipment Detail|_CSS_418|/stock/stockshipmentdetailsave|413|1|0
+419|Stock Save|_CSS_419|/stock/stocksave|400|1|0
+420|Stock Specification|_CSS_420|/stock/stockspecificationsave|413|1|0
+421|Stock Shipment Party|_CSS_421|/stock/stockshipmentpartysave|413|1|0
+422|Stock Cost Detail|_CSS_422|/stock/stockcostdetailsave|413|1|0
+423|Stock Weight Dimension|_CSS_423|/stock/stockweightdimensionlsave|413|1|0
+424|Stock Price|_CSS_424|/stock/stockpricesave|413|1|0
+425|Stock Financial Delete|_CSS_425|/stock/stockfinancialdelete|416|1|0
+426|Stock Courier Info|_CSS_426|/stock/stockcourierinfosave|413|1|0
+427|Stock Section|_CSS_427|/stock/stocksectiongetbyid|413|1|0
+500|Bank Statement|_CSS_500|/|0|1|0
+501|Bank Statment Listing|_CSS_501|/bankstatement|500|1|0
+502|Bank Reconcilation|_CSS_502|/bankStatement/bankstatementreconcilation|501|1|0
+503|Bank Statement Upload|_CSS_503|/bankStatement/addstatement|501|1|0
+504|Bank Reconcilation Approval|_CSS_504|/bankStatement/bankstatementreconcilationapproval|502|1|0
+520|Income|_CSS_520|/|0|1|0
+521|Income Reconcilation Listing|_CSS_521|/bankStatement/incomereconcilationgetall|520|1|0
+522|Income Reconcilation|_CSS_522|/bankStatement/incomereconcilation|520|1|0
+523|Customer Edit|_CSS_523|/customer/customersave|100|1|0
+524|My Task|_CSS_524|/user/mytask|0|1|0
+525|Customer Wallet Conversions|_CSS_525|/customer/getallwalletconversion|524|1|0
+526|Customer Tagging|_CSS_526|/|0|1|0
+527|Stock Tab Images|_CSS_527|Stock/StockDetail|400|1|0
+528|Stock Tab Overview|_CSS_528|Stock/StockDetail|400|1|0
+529|Stock Tab Reservation Bids|_CSS_529|Stock/StockDetail|400|1|0
+530|Stock Tab Reservation|_CSS_530|Stock/StockDetail|400|1|0
+531|Stock Tab Cost|_CSS_531|Stock/StockDetail|400|1|0
+532|Stock Tab Inspection|_CSS_532|Stock/StockDetail|400|1|0
+533|Stock Tab Shipment|_CSS_533|Stock/StockDetail|400|1|0
+534|Stock Tab Documents|_CSS_534|Stock/StockDetail|400|1|0
+535|Stock Tab Internal Notes|_CSS_535|Stock/StockDetail|400|1|0
+536|Stock Tab Status|_CSS_536|Stock/StockDetail|400|1|0
+537|Inquiry|_CSS_537|/Inquiry/InquiryGetAll|0|1|0
+538|Inquiry Listing|_CSS_538|/|537|1|0
+539|Inquiry Save|_CSS_539|/|537|1|0
+540|Sales|_CSS_540|/|0|1|0
+541|Customer Tab My Profile|_CSS_541|/|100|1|0
+542|Customer Tab My Reservation|_CSS_542|/|100|1|0
+543|Customer Tab Wallet Conversion|_CSS_543|/|100|1|0
+544|Customer Tab Purchase History|_CSS_544|/|100|1|0
+545|Customer Tab Cancellation History|_CSS_545|/|100|1|0
+546|Customer Tab Inquiries|_CSS_546|/|100|1|0
+547|Customer Tab Customer Remarks|_CSS_547|/|100|1|0
+548|User Hierarchy|_CSS_548|/|200|1|0
+549|Reporting Module|_CSS_549|/|0|1|0
+550|Customer Tagging|_CSS_550|/|100|1|0
+551|Tagged History|_CSS_551|/|100|1|0
+552|UnTagged History|_CSS_552|/|100|1|0
+553|Cannot Tag Customer|_CSS_553|/|100|1|0
+554|Customer Tab Consignee|_CSS_554|/|100|1|0
+555|Customer Tab Notify Party|_CSS_555|/|100|1|0
+556|Customer Tab Courier|_CSS_556|/|100|1|0
+557|Stock Activity|_CSS_557|Stock/StockDetail|400|1|0
+558|Stock Export|_CSS_558|Stock/Index|400|1|0
+559|Customer Statement|_CSS_559|/customer/customerdetail|100|1|0
+560|Consginee Tab|_CSS_560|/Stock/StockDetail|400|1|0
+561|Stock Cost Edit/Save|_CSS_561|/Stock/StockDetail|400|1|0
+562|Customer Adjustment|_CSS_562|/customer/customerdetail|100|1|0
+563|Reservation Edit|_CSS_563|Stock/StockDetail|400|1|0
+564|Purchased Stock View|_CSS_564|/|400|1|0
+565|Pre-Departure Stock View|_CSS_565|/|400|1|0
+566|In Transit Stock View|_CSS_566|/|400|1|0
+567|In Garage Stock View|_CSS_567|/|400|1|0
+568|Ready for Sale Stock View|_CSS_568|/|400|1|0
+569|Avaialble for Sale Stock View|_CSS_569|/|400|1|0
+570|Sold Stock View|_CSS_570|/|400|1|0
+571|Not Sold Stock View|_CSS_571|/|400|1|0
+572|Archive Stock View|_CSS_572|/|400|1|0
+573|Warehouse Stock View|_CSS_573|/|400|1|0
+574|Stock Journey Status|_CSS_574|/|400|1|0
+575|In Garage|_CSS_575|/|400|1|0
+576|Not Sold (Admin Only)|_CSS_576|/|400|1|0
+577|Pricing Module|_CSS_577|/|0|1|0
+578|Stock Deallocation|_CSS_578|/customer/customerdetail|100|1|0
+579|Forfeit Customer Balance|_CSS_579|/customer/customerbalanceforfeituresave|100|1|0
+580|Add Financials|_CSS_580|/stock/stockdetail|400|1|0
+581|Release Forfeited Balance|_CSS_581|/customer/customerbalanceforfeiturereleasesave|579|1|0
+590|Document Module|_CSS_590|/document/index|400|1|0
+591|Document - Draft BL|_CSS_591|/|590|1|0
+592|Document - OBL|_CSS_592|/|590|1|0
+593|Document - Inspection|_CSS_593|/|590|1|0
+594|Document - DHL|_CSS_594|/|590|1|0
+595|Document - Invoice|_CSS_595|/|590|1|0
+596|Document - Repair Bills|_CSS_596|/|590|1|0
+597|Document - DHL Tracking|_CSS_597|/document/savetracking|590|1|0
+598|Document - Export Certificate|_CSS_598|/|590|1|0
+599|Shipping - Freight Status|_CSS_599|/shipping/savefreightstatus|611|1|0
+600|Request Stock Deallocation|_CSS_600|/customer/stockdeallocationsave|578|1|0
+601|Direct Stock Deallocation|_CSS_601|/customer/stockdeallocationsave|578|1|0
+602|Review Stock Deallocation|_CSS_602|/customer/deallocationrequestapprovalsave|578|1|0
+603|Inspection Module|_CSS_603|/inspection/index|400|1|0
+604|Inspection - Update Result|_CSS_604|/inspection/save|603|1|0
+605|Vendor Module|_CSS_605|/vendor/index|400|1|0
+606|Vendor - Create Vendor|_CSS_606|/vendor/savevendor|605|1|0
+607|Vendor - Create Job|_CSS_607|/vendor/savejob|605|1|0
+608|Inquiry - Contact Edit Save|_CSS_608|/|537|1|0
+609|Vendor - Settle Payment|_CSS_609|/vendor/savesettlement|605|1|0
+610|Shipping - Complete Schedule|_CSS_610|/shipping/complete|611|1|0
+611|Shipping Module|_CSS_611|/shipping/index|400|1|0
+612|My Task - Remittances|_CSS_612|/user/remittancerequests|524|1|0
+613|My Task - Currency Conversions|_CSS_613|/customer/getallwalletconversion|524|1|0
+614|My Task - Refunds|_CSS_614|/customer/getpendingrefundrequests|524|1|0
+615|My Task - Adjustments/Waivers|_CSS_615|/customer/getadjustmentrequests|524|1|0
+616|My Task - Deallocations|_CSS_616|/customer/getdeallocationrequests|524|1|0
+617|My Task - Discount Requests|_CSS_617|/stock/stockgetdiscountrequests|524|1|0
+618|My Task - Shipping Requests|_CSS_618|/user/shippingrequests|524|1|0
+619|Consignee Edit|_CSS_619|/stock/stockshipmentpartysave|413|1|0
+620|Notify Party Edit|_CSS_620|/stock/stockshipmentpartysave|413|1|0
+621|Customer Wallet Transfer|_CSS_621|/|100|1|0
+622|Request Customer Wallet Transfer|_CSS_622|/customer/customerwallettransferrequestsave|621|1|0
+623|Review Customer Wallet Transfer|_CSS_623|/customer/customerwallettransferapprovalsave|621|1|0
+624|My Task - Wallet Transfers|_CSS_624|/customer/getcustomerwallettransfers|524|1|0
+625|Direct Customer Wallet Transfer|_CSS_625|/customer/customerwallettransferrequestsave|621|1|0
+626|Reserved Stock Detail - Self Access|_CSS_626||413|1|0
+627|Reserved Stock Detail - Team Scope|_CSS_627||413|1|0
+628|Reserved Stock Detail - All Scope|_CSS_628||413|1|0
+629|Customer Tab Conversation Logs|_CSS_629|/customer/customerconversationlogs|100|1|0
+630|Australia transport|TransportModule|/|0|1|0
+631|Transport quotations|TransportQuote|/transport/index|630|1|0
+632|Transport administration|TransportAdmin|/transport/admin|630|1|0
