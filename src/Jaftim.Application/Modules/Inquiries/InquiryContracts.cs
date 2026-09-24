@@ -2,6 +2,7 @@ using FluentValidation;
 using Jaftim.Application.Abstractions;
 using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Notifications;
+using Jaftim.Application.Modules.Tagging;
 using Jaftim.Domain.Entities.Inquiries;
 using Jaftim.Domain.Exceptions;
 using Microsoft.Extensions.Logging;
@@ -129,8 +130,6 @@ public interface IInquiryRepository
     Task SaveContactStatusAsync(long inquiryId, long userProfileId, int statusId, string? remarks, CancellationToken ct = default);
     /// <summary>EXEC Inquiry_TaggedFromInquiries - tag the inquiry's party to an agent.</summary>
     Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default);
-    /// <summary>EXEC CustomerTagging_UnTagCustomerFromAgent - deactivates the (customer, agent) tag, if any.</summary>
-    Task UntagCustomerFromAgentAsync(long customerId, long agentId, CancellationToken ct = default);
     /// <summary>EXEC CustomerContact_GetByCustomerId / CustomerContact_Save (the interaction log).</summary>
     Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default);
     Task LogInteractionAsync(long userProfileId, LogInteractionRequest request, DateTime contactedTimeUtc, CancellationToken ct = default);
@@ -164,6 +163,7 @@ public sealed class InquiryService(
     IAuditWriter audit,
     IDateTimeProvider clock,
     INotificationDispatcher notifications,
+    ITaggingService tagging,
     ILogger<InquiryService> logger,
     IValidator<InquiryListRequest> listValidator,
     IValidator<InquiryContactStatusRequest> contactStatusValidator,
@@ -243,13 +243,7 @@ public sealed class InquiryService(
         await audit.RecordAsync("Inquiry.TaggedToAgent", "Inquiry", inquiryId,
             new { before.TaggedAgentId, before.Tagged }, new { TaggedAgentId = agentId }, ct);
 
-        // Legacy NotificationDispatcher.CustomerTagged; the URL is the legacy screen's, which still reads this table.
-        await notifications.NotifyAsync(new NotificationRequest(
-            NotificationTypeCodes.CustomerTagged,
-            Message: "A customer has been tagged to you.",
-            EntityType: "Customer", EntityId: partyId,
-            Url: $"/Customer/CustomerDetail?userId={partyId}",
-            RecipientUserIds: [agentId], UseRoleMap: false), ct);
+        await notifications.NotifyAsync(TaggingNotifications.Tagged(partyId, agentId), ct);
     }
 
     /// <summary>
@@ -275,26 +269,17 @@ public sealed class InquiryService(
 
     /// <summary>
     /// Legacy UnTagFromInquiriesBulk: keyed on (customer, agent), so selected rows sharing a customer collapse into one
-    /// call. Like the legacy action, the procedure reports "Ok" even when no active tag matched, and the agent is
-    /// still notified - v2 has no cheap per-pair existence check to do better.
+    /// call to <see cref="ITaggingService.UntagAsync"/>.
     /// </summary>
     public async Task<BulkTagResult> UntagBulkAsync(InquiryBulkUntagRequest request, CancellationToken ct = default)
     {
         await bulkUntagValidator.ValidateAndThrowAppAsync(request, ct);
         InquiryBulkUntagItem[] pairs = request.Items!.Where(i => i.CustomerId > 0 && i.AgentId > 0).Distinct().ToArray();
 
-        (int succeeded, int failed) = await RunEachAsync(pairs, async pair =>
-        {
-            await repository.UntagCustomerFromAgentAsync(pair.CustomerId, pair.AgentId, ct);
-            await audit.RecordAsync("Customer.UntaggedFromAgent", "UserProfile", pair.CustomerId,
-                new { TaggedAgentId = pair.AgentId }, new { TaggedAgentId = (long?)null }, ct);
-            await notifications.NotifyAsync(new NotificationRequest(
-                NotificationTypeCodes.CustomerUntagged,
-                Message: "A customer has been untagged from you.",
-                EntityType: "Customer", EntityId: pair.CustomerId,
-                Url: null,   // the agent no longer has access to the customer profile
-                RecipientUserIds: [pair.AgentId], UseRoleMap: false), ct);
-        }, pair => $"customer {pair.CustomerId} / agent {pair.AgentId}", ct);
+        // Each pair is exactly the single untag of the tagging module (procedure, audit row, notification).
+        (int succeeded, int failed) = await RunEachAsync(pairs,
+            pair => tagging.UntagAsync(new TagCustomerRequest(pair.CustomerId, pair.AgentId), ct),
+            pair => $"customer {pair.CustomerId} / agent {pair.AgentId}", ct);
 
         if (succeeded == 0)
             throw new BusinessRuleException("None of the selected inquiries could be untagged.");

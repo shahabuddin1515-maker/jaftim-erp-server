@@ -149,6 +149,56 @@ admins per notification), identical to legacy. `CustomerTagging.AgentId` is a `U
 notification recipients are keyed by), but 84 of the 265 local rows point at no `UserProfile` - legacy data,
 left alone.
 
+## Customer tagging (`/api/tagging`)
+
+Ported 2026-09-24 from `CustomerTaggingController`. A **tag** is a `CustomerTagging` row linking a customer-role
+party to the staff member (agent) who looks after them. At most one row per customer is active: tagging a
+customer deactivates every other row for that customer, so it *moves* them.
+
+| Endpoint | Procedure | Perm (legacy `_CSS_` gate) |
+|---|---|---|
+| `GET /api/tagging/agents` | `CustomerTagging_GetAllManagerAgent` | 526 (sidebar entry) |
+| `GET /api/tagging/agents/{id}/customers` | `CustomerTagging_AgentTaggedCustomer` | 551 (Tagged History tab) |
+| `GET /api/tagging/agents/{id}/history` | `CustomerTagging_AgentUnTaggedCustomerHistory` | 552 (UnTagged History tab) |
+| `GET /api/tagging/me/customers` · `me/history` | the same two, for the caller | 907 (v2 "My Tagging", seeded for role 2) |
+| `GET /api/tagging/available-customers` | `CustomerTagging_AvailableCustomers` | 550 |
+| `POST /api/tagging/tag` · `untag` `{ customerId, agentId }` | `CustomerTagging_TagCustomerToAgent` / `_UnTagCustomerFromAgent` | 550 |
+
+`_CSS_553` ("Cannot Tag Customer") only hides the Assigned Agent column of the legacy Customers list; no endpoint
+here uses it. The `/me` routes exist because the legacy sidebar linked Sales Executives to their own
+`AgentTaggingDetail?userId=<self>`; v2 navigation points at `/tagging/me`.
+
+Visibility lives in the procedures and keys off `@CreatedBy` (the caller's **primary** role):
+
+- **Agents list:** primary roles 1 and 7 see every agent (`Role.UserTypeId` 2 or 5); everyone else only agents whose
+  `CountryId` is in `fn_GetUserAccessibleCountries(caller)`.
+- **An agent's customers / history:** a Sales Executive (RoleId 2) gets rows only for themself - for anyone else
+  the procedure returns an empty list, not an error. With the current grants that filter is never reached through
+  the API: role 2 holds 526 and 907 but not 551/552 (checked locally 2026-09-24), so a Sales Executive uses
+  `/me/...` and gets 403 on `/agents/{id}/...`, just as the legacy tabs were hidden from them.
+- **Available customers:** every customer-role party (`UserTypeId` 3) with no active tag, with no country filter
+  and no paging (851 rows locally). The legacy screen renders it in full; v2 returns it in full too.
+
+Tagging rules (inside `CustomerTagging_TagCustomerToAgent`, checked against the **agent**, not the caller):
+
+1. **Limit:** the agent's active distinct customers must be below `UserProfileDetail.CustomerTagLimit`. A **NULL
+   limit means unlimited** (`count >= NULL` is never true). A limit of 0 blocks every tag.
+2. **Divisions:** the customer's `CountryId` must be in `fn_GetUserAccessibleCountries(agent)`. An agent with no
+   divisions can hold nobody.
+
+The procedure returns these rejections as an ordinary result row (`'Limit Exceeded'`,
+`'Customer does not exists in your assigned divisions'`), not as an error. v2 turns them into **422** with
+reworded text (the original says "your" divisions, but it checks the agent's) and notifies only on `'Ok'`
+(defect 5). Untag always reports `'Ok'`, even when no active tag matched, and the agent is notified anyway, as
+in legacy.
+
+**Tagging from an inquiry is a different path with different rules.** `Inquiry_TaggedFromInquiries` (used by
+`POST /api/inquiries/{id}/tag` and `tag-bulk`) applies **neither** the limit nor the division check. That is
+legacy behaviour, preserved. Whether both paths should enforce the rules is a product question.
+
+Moving a customer notifies only the new agent; the previous agent gets no `CUSTOMER_UNTAGGED`, and the move is
+invisible in their untag history (defect 6). Both are legacy behaviour, unchanged.
+
 ## Inbound leads are not handled here
 
 `JaftimWebhooks` (the Azure Function) keeps receiving `POST /api/leads` and calling `InsertLead` directly on its own
@@ -207,4 +257,20 @@ Nothing below was silently absorbed: each is either documented and left alone, o
    `Inquiry.AspNetUserId -> UserProfile`; when that finds nothing, `@CustomerId` is NULL, and because
    `CustomerTagging.CustomerId` is nullable it inserts an active tag for no one, sets `Inquiry.AssignedTo`, and
    returns "Ok". 0 such rows exist locally today, and 111 of 1 192 local inquiries are unlinked. v2 refuses to tag
-   an inquiry without a party (422) and never calls the procedure for it; the procedure is unchanged.
+   an inquiry without a party (422) and never calls the procedure for it; the procedure is unchanged. Such a row
+   would also **empty the Available Customers list** - see defect 7.
+5. **`CustomerTagging_TagCustomerToAgent` rejections were reported as success.** The procedure returns
+   `'Limit Exceeded'` / `'Customer does not exists in your assigned divisions'` as a result row; the legacy action
+   checked only the HTTP status of its own service call, so it sent `CUSTOMER_TAGGED` for a tag that never
+   happened. v2 checks the returned text: 422, no notification, no audit row.
+6. **Moving a customer leaves no trace in the previous agent's history.** Tagging runs
+   `UPDATE CustomerTagging SET IsActive = 0 WHERE CustomerId = @customerId` without setting `ModifiedBy` or
+   `ModifiedAt`, and `CustomerTagging_AgentUnTaggedCustomerHistory` **inner**-joins `ModifiedBy` to find who
+   untagged. So a reassigned customer disappears from the previous agent's list and never appears in their
+   history. Verified locally on 2026-09-24 (customer 13600 moved from agent 133 to 12259). Preserved: fixing it
+   means a `_V2` procedure (or a `LEFT JOIN` history variant) - a product decision.
+7. **One NULL-customer tag empties Available Customers.** `CustomerTagging_AvailableCustomers` filters with
+   `UserProfileId NOT IN (SELECT CustomerId FROM CustomerTagging WHERE IsActive = 1 ...)`. If any active row has
+   `CustomerId IS NULL` (which defect 4 can create), `NOT IN` is never true and the list is **empty**. 0 such rows
+   locally. **UAT not checked yet**: run
+   `SELECT COUNT(*) FROM CustomerTagging WHERE IsActive = 1 AND IsDeleted = 0 AND CustomerId IS NULL` (read-only).

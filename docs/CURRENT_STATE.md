@@ -1,6 +1,6 @@
 # Current Development State
 
-Last updated: 2026-09-24 (bulk tag/untag ported)
+Last updated: 2026-09-24 (customer tagging module ported)
 
 > Handoff only. This file is **not** authoritative over code, tests, the database or the other docs - if it
 > disagrees with them, they win and this file is stale. Permanent knowledge belongs in the documents listed in
@@ -13,20 +13,20 @@ from the leftovers listed there.
 
 ## Current Objective
 
-Finish the remaining Module 3 surface. Inquiry read, add/update, single tag and bulk tag/untag are complete; what
-is left is the `CustomerTagging` screens, bulk import, and the public endpoint.
+Finish the remaining Module 3 surface. Inquiry read, add/update, single and bulk tag/untag, and the customer
+tagging module are complete; what is left is bulk inquiry import and the public endpoint.
 
 No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
-- **Bulk tag/untag** (2026-09-24): `POST /api/inquiries/tag-bulk`, `/untag-bulk` (perm 550). Loops the single-row
-  procedures, dedupes (tag by inquiry, untag by customer+agent), partial success, 422 only when nothing succeeded.
-  The single-row `POST /api/inquiries/{id}/tag` now also sends `CUSTOMER_TAGGED` (it was missing) and refuses an
-  inquiry with no party. Contract and v2 departures: `docs/INQUIRIES.md` → "Tagging"; new defect 4 there.
+- **Customer tagging module** (2026-09-24): `/api/tagging` - agents, an agent's customers/history, `/me/...`
+  (907), available customers, tag, untag. New `Tagging` module (`TaggingService`, `TaggingRepository`); it now owns
+  every `CustomerTagging` write outside the inquiry procedure, and inquiry bulk-untag goes through it. Rules,
+  visibility and defects 5-7: `docs/INQUIRIES.md` → "Customer tagging".
+- **Bulk tag/untag** (2026-09-24): `POST /api/inquiries/tag-bulk`, `/untag-bulk`; the single inquiry tag now
+  notifies and refuses an unlinked inquiry (defect 4).
 - **Inquiry add path** (2026-09-23) and `database/v2/006` (the `CustomerSave` guard repair).
-- Earlier in Module 3: inquiry list/detail, party classification (`database/v2/005`), party
-  sections/inquiries/interactions, contact-status, `PartyKindSyncJob`.
 
 ## Work In Progress
 
@@ -34,7 +34,6 @@ Nothing is half-implemented. Not started:
 
 | Not started | Legacy source | Notes |
 |---|---|---|
-| `CustomerTaggingController.*` | same | Procedures exist: `CustomerTagging_GetAllManagerAgent`, `_AgentTaggedCustomer`, `_AgentUnTaggedCustomerHistory`, `_AvailableCustomers`, `_TagCustomerToAgent`, `_UnTagCustomerFromAgent`. Reuse `IInquiryRepository.UntagCustomerFromAgentAsync` and the notification shapes in `InquiryService`. |
 | `POST /api/inquiries/bulk` | `InquiryController.BulkInquirySave` | `BulkInquiryImport_V2` (TVP) exists; wants a Hangfire job with progress. |
 | `POST /api/public/inquiries` | `PublicController.InquirySave` | Anonymous; needs a captcha/rate-limit decision. |
 
@@ -45,21 +44,28 @@ Nothing is half-implemented. Not started:
 
 Verified on 2026-09-24 in this repository:
 
-- `dotnet build` - **no warnings, no errors**. `dotnet test` - **73 passing** (64 Application + 9 Api), 0 failing.
+- `dotnet build` - **no warnings, no errors**. `dotnet test` - **81 passing** (72 Application + 9 Api), 0 failing.
 - Local databases: `v2/001`-`006` present in both `jaftim-local-db` and `jaftim-local-db2`; the `v2/006` patch
   marker confirmed in `CustomerSave` in both.
-- **Bulk tag/untag run against the local API, tenant `jaftim`:** partial tag (2 of 3, unlinked inquiry 1488
-  failed as 404), all-unlinked → 422, agent 0 → 400, untag with a duplicate pair → 2 calls, invalid untag → 400.
-  Confirmed in the database: `CustomerTagging` rows, `Inquiry.AssignedTo`, 4 `AuditLog` rows, notifications to the
-  agent (+ System Admins, by the type's `IncludeSystemAdmins`). **All test rows were deleted afterwards** and
-  `AssignedTo` restored to NULL (baselines: `CustomerTagging` max 265, `Notification` max 94, `AuditLog` max 40).
+- **Tagging module run against the local API, tenant `jaftim`, as the super admin:** agents (29), agent 133's
+  customers (56) and history (6), available (851 → 849 after two tags), limit-0 agent → 422, agent with no
+  divisions → 422, limit-1 agent: first tag 200 then 422, NULL-limit agent → 200, id 0 → 400, untag → 200 and
+  shows in history, `/me/customers` → 403 (super admin lacks 907, as seeded). Database: tag rows, 3 audit rows,
+  3 notifications (none for rejections). Defect 6 reproduced. **All test rows deleted afterwards** (baselines:
+  `CustomerTagging` max 265, `Notification` max 94, `AuditLog` max 40).
+- **As Sales Executive 149** (role 2): `/me/customers` → 31 (= its active tags), `/me/history` → 0, `/agents` →
+  200 empty (149 has no divisions), 551/552/550 routes → 403 (local role 2 holds only 526 and 907). The
+  procedure-level "self only" filter is therefore unreachable for role 2 through the API today.
+  Local-only side effect: `tools/set-local-password.ps1` set `LocalTest1234` for `faizan1812@jaftim.com` (149) and
+  `smaffan1589@jaftim.com` (133, whose catalog account is inactive - login still refused).
+- **Bulk inquiry tag/untag** run the same way earlier the same day (partial success, 422, 400), rows cleaned up.
 
 Not verified / no coverage:
 
-- No integration test hits a real database - every test uses fakes. `InquirySaveRepository.SaveAsync`'s
-  transaction and the bulk tag procedure calls are covered only by the manual runs above.
+- No integration test hits a real database - every test uses fakes. The procedure calls are covered only by the
+  manual runs above.
 - `jaftim-local-db2` has never had an inquiry created or tagged against it.
-- The outage-rethrow branch of bulk tag is unit-tested only (not provoked against a real database).
+- UAT not checked for active NULL-customer tags (defect 7 query, read-only).
 
 ## Open Questions / Blockers
 
@@ -68,36 +74,37 @@ No blockers. Owed by the owner/product, not blocking:
 1. **Promoting `database/v2/006` to UAT/Live** - until then every new enquirer added on UAT/Live still fails.
 2. 12 roles have zero `RoleActionMapping` rows, so they are locked out of the API. Seed before go-live
    (query in `docs/DATABASE.md`).
+3. Tagging product questions (`docs/REWRITE_PLAN.md` §7): should inquiry-path tagging enforce the limit and
+   divisions; should reassignment show in the previous agent's history / notify them (needs a `_V2` procedure).
 
 ## Important Recent Discoveries
 
 Already in the permanent docs; delete from here once no longer recent.
 
-1. `Inquiry_TaggedFromInquiries` and `CustomerTagging_UnTagCustomerFromAgent` **always** return "Ok" - the legacy
-   "failed" count could only ever come from an exception. An unlinked inquiry gets a NULL-customer tag
-   (`docs/INQUIRIES.md` defect 4, `REWRITE_PLAN.md` §7).
-2. `GetInquiryAll` does not return unlinked inquiries (observed for 1488), so `GET /api/inquiries/{id}` is 404 for
-   them - worth remembering when a "missing" inquiry is reported.
-3. `CustomerSave` rejected every new enquirer (fixed by `v2/006`; `docs/INQUIRIES.md` defect 0) - the one approved
-   exception to additive-only.
+1. `CustomerTagging_TagCustomerToAgent` returns rejections as a result row; legacy notified on them (defect 5).
+   A NULL `CustomerTagLimit` means unlimited.
+2. Two tagging paths, two rule sets: the inquiry path skips the limit and division checks.
+3. Reassignment is invisible in the previous agent's history (defect 6); one NULL-customer tag would empty
+   Available Customers (defect 7).
+4. `GetInquiryAll` does not return unlinked inquiries, so `GET /api/inquiries/{id}` is 404 for them.
 
 ## Relevant Files
 
-For the next objective (`CustomerTaggingController`):
+For the next objective (bulk inquiry import):
 
-- `C:\jaftimv2\Jaftim\Jaftim\Controllers\CustomerTaggingController.cs` - the legacy actions.
-- `src/Jaftim.Application/Modules/Inquiries/InquiryContracts.cs` - `InquiryService` tag/untag + notifications.
-- `src/Jaftim.Infrastructure/Repositories/InquiryRepository.cs` - the tag/untag procedure calls.
-- `docs/MIGRATION_INVENTORY.md` Module 3 row for the planned `/api/tagging/*` routes and permissions 526/550-553.
+- `C:\jaftimv2\Jaftim\Jaftim\Controllers\InquiryController.cs` - `BulkInquirySave` and its view/JS.
+- `BulkInquiryImport_V2` and its table type (read the definition locally first).
+- `src/Jaftim.Jobs/` and `docs/CONVENTIONS.md` "Adding a background job" - the job recipe.
+- `src/Jaftim.Application/Modules/Inquiries/InquirySaveService.cs` - the single-row add rules to stay consistent with.
 
 ## Next Actions
 
-1. **Port `CustomerTaggingController`** - `GET /api/tagging/agents`, `/agents/{id}/customers`,
-   `/agents/{id}/history`, `/available-customers`; `POST /api/tagging/tag`, `/untag` (the six `CustomerTagging_*`
-   procedures). Read the legacy controller first to confirm the permission per action (inventory says 526/550-553)
-   and reuse the tag/untag notification shapes. Consider moving tagging into its own service at that point.
-2. Port bulk inquiry import as a Hangfire job over `BulkInquiryImport_V2` (TVP) with progress.
-3. Decide captcha/rate-limiting, then port `POST /api/public/inquiries`.
+1. **Port bulk inquiry import** (`InquiryController.BulkInquirySave`) as a Hangfire job over
+   `BulkInquiryImport_V2` (TVP) with progress. Start by reading the legacy action, the procedure and its table
+   type, and how the legacy screen reports per-row errors.
+2. Decide captcha/rate-limiting, then port `POST /api/public/inquiries`.
+3. Optional: page/search `GET /api/tagging/available-customers` in memory if the UAT row count makes the full list
+   too heavy (check the count on UAT, read-only).
 4. Then Module 2 leftovers (user sections/stocks/image, entities/hierarchy/org-chart) or Module 4, owner's choice.
 
 ## Working Tree / Git Context

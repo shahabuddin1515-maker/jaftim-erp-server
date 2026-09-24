@@ -6,6 +6,7 @@ using Jaftim.Application.Modules.Lookups;
 using Jaftim.Application.Modules.Navigation;
 using Jaftim.Application.Modules.Notifications;
 using Jaftim.Application.Modules.Stock;
+using Jaftim.Application.Modules.Tagging;
 using Jaftim.Application.Modules.Tenancy;
 using Jaftim.Application.Modules.Users;
 using Microsoft.Extensions.DependencyInjection;
@@ -32,6 +33,7 @@ public static class DependencyInjection
         services.AddScoped<IAuditQueryService, AuditQueryService>();
         services.AddScoped<IStockService, StockService>();
         services.AddScoped<IInquiryService, InquiryService>();
+        services.AddScoped<ITaggingService, TaggingService>();
         services.AddScoped<IPartyService, PartyService>();
         services.AddScoped<IInquirySaveService, InquirySaveService>();
         services.AddScoped<ILookupService, LookupService>();

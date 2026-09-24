@@ -6,6 +6,7 @@ using Jaftim.Application.Modules.Lookups;
 using Jaftim.Application.Modules.Navigation;
 using Jaftim.Application.Modules.Notifications;
 using Jaftim.Application.Modules.Stock;
+using Jaftim.Application.Modules.Tagging;
 using Jaftim.Application.Modules.Tenancy;
 using Jaftim.Application.Modules.Users;
 using Jaftim.Infrastructure.Data;
@@ -63,6 +64,7 @@ public static class DependencyInjection
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IStockRepository, StockRepository>();
         services.AddScoped<IInquiryRepository, InquiryRepository>();
+        services.AddScoped<ITaggingRepository, TaggingRepository>();
         services.AddScoped<IInquirySaveRepository, InquirySaveRepository>();
         services.AddScoped<ILookupRepository, LookupRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();

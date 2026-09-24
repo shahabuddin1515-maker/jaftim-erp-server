@@ -2,6 +2,7 @@ using Jaftim.Application.Abstractions;
 using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Inquiries;
 using Jaftim.Application.Modules.Notifications;
+using Jaftim.Application.Modules.Tagging;
 using Jaftim.Domain.Entities.Inquiries;
 using Jaftim.Domain.Exceptions;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -126,7 +127,7 @@ public sealed class InquiryServiceTests
             [new(11, 5), new(11, 5), new(11, 6), new(12, 5), new(0, 5), new(13, 0)]));
 
         Assert.Equal(new BulkTagResult(3, 3, 0, "3 customers untagged successfully."), result);
-        Assert.Equal([(11L, 5L), (11L, 6L), (12L, 5L)], repo.Untagged);
+        Assert.Equal([(11L, 5L), (11L, 6L), (12L, 5L)], repo.Tagging.Untagged);
         Assert.Equal(3, audit.Actions.Count(a => a == "Customer.UntaggedFromAgent"));
         Assert.All(notify.Sent, n => Assert.Equal(NotificationTypeCodes.CustomerUntagged, n.TypeCode));
 
@@ -144,9 +145,17 @@ public sealed class InquiryServiceTests
         audit = new AuditSpy();
         party = new PartySpy();
         notify = new NotifySpy();
-        return new InquiryService(repo, party, audit, new FixedClock(), notify, NullLogger<InquiryService>.Instance,
+        // The real tagging service over a fake repository, sharing the spies, so bulk untag is tested end to end.
+        var tagging = new TaggingService(repo.Tagging, audit, notify, new NoCaller(), new TagCustomerRequestValidator());
+        return new InquiryService(repo, party, audit, new FixedClock(), notify, tagging, NullLogger<InquiryService>.Instance,
             new InquiryListRequestValidator(), new InquiryContactStatusRequestValidator(), new LogInteractionRequestValidator(),
             new InquiryBulkTagRequestValidator(), new InquiryBulkUntagRequestValidator());
+    }
+
+    private sealed class NoCaller : ICurrentUser
+    {
+        public bool IsAuthenticated => true; public long UserProfileId => 1; public string? AccountId => "a"; public string? Email => "a@b.c";
+        public string? FullName => "A"; public long RoleId => 1; public int UserTypeId => 1; public int CompanyId => 1;
     }
 
     private sealed class NotifySpy : INotificationDispatcher
@@ -180,7 +189,7 @@ public sealed class InquiryServiceTests
         public Dictionary<long, InquiryListItem> ById { get; } = [];
         public Exception? TagFault { get; init; }
         public List<(long Inquiry, long Agent)> Tagged { get; } = [];
-        public List<(long Customer, long Agent)> Untagged { get; } = [];
+        public TaggingRepoFake Tagging { get; } = new();
         public InquiryListRequest? LastRequest { get; private set; }
         public (long Inquiry, long Party, int Status)? SavedContactStatus { get; private set; }
         public DateTime? LoggedAt { get; private set; }
@@ -203,8 +212,7 @@ public sealed class InquiryServiceTests
             Tagged.Add((inquiryId, agentId));
             return Task.CompletedTask;
         }
-        public Task UntagCustomerFromAgentAsync(long customerId, long agentId, CancellationToken ct = default)
-        { Untagged.Add((customerId, agentId)); return Task.CompletedTask; }
+
         public Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<CustomerInteraction>>([]);
         public Task LogInteractionAsync(long userProfileId, LogInteractionRequest request, DateTime contactedTimeUtc, CancellationToken ct = default)
         { LoggedAt = contactedTimeUtc; return Task.CompletedTask; }
@@ -282,7 +290,6 @@ public sealed class PartyServiceTests
         public Task<IReadOnlyList<InquiryListItem>> GetByPartyAsync(long userProfileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task SaveContactStatusAsync(long inquiryId, long userProfileId, int statusId, string? remarks, CancellationToken ct = default) => throw new NotSupportedException();
         public Task TagToAgentAsync(long inquiryId, long agentId, CancellationToken ct = default) => throw new NotSupportedException();
-        public Task UntagCustomerFromAgentAsync(long customerId, long agentId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<IReadOnlyList<CustomerInteraction>> GetInteractionsAsync(long userProfileId, CancellationToken ct = default) => throw new NotSupportedException();
         public Task LogInteractionAsync(long userProfileId, LogInteractionRequest request, DateTime contactedTimeUtc, CancellationToken ct = default) => throw new NotSupportedException();
     }
