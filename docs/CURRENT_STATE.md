@@ -1,6 +1,6 @@
 # Current Development State
 
-Last updated: 2026-09-24
+Last updated: 2026-09-24 (repo placed under git and published the same day - see Working Tree / Git Context)
 
 > Handoff only. This file is **not** authoritative over code, tests, the database or the other docs - if it
 > disagrees with them, they win and this file is stale. Permanent knowledge belongs in the documents listed in
@@ -109,15 +109,18 @@ Only for the current objective (bulk tag/untag next):
 
 ## Working Tree / Git Context
 
-**This repository is not under version control** - `C:\jaftimv2\JaftimBackend` has no `.git`, so there is no
-`git status`, no history and no commits to compare against. A `.gitignore` exists but is unused.
+Under git since **2026-09-24**. Remote: `https://github.com/shahabuddin1515-maker/jaftim-erp-server`.
 
-Consequences for a fresh session:
-- The startup protocol's "inspect git status / recent history" steps cannot be performed here. Reconcile against
-  the **filesystem, the local databases and `dotnet build && dotnet test`** instead.
-- There is no way to see what a previous session changed, and no way to roll back. Be correspondingly careful with
-  destructive edits, and prefer additive changes.
-- Initialising a repository would remove this whole class of risk, but that is the owner's call and has not been
-  asked for. Flagged, not actioned.
+- Branches `master` (default), `staging`, `dev` - all three at the same initial commit `3a688d7`
+  ("Initial commit: Jaftim ERP v2 backend"), which contains everything described in this file.
+- **The remote is public.** The owner was shown what that exposes (office IP allowlist CIDRs in
+  `src/Jaftim.Api/appsettings.json`, the UAT/Live hostnames in `docs/DATABASE.md`, the live-defect write-ups in
+  `docs/INQUIRIES.md`) and chose to publish as-is on 2026-09-24. **Never commit a real credential** - all config
+  secrets are empty placeholders and must stay that way (`docs/GETTING_STARTED.md`).
+- No work is uncommitted as of the initial commit; run `git status` to confirm nothing has drifted since.
 
-The legacy reference repo `C:\jaftimv2\Jaftim` is likewise not a git repository.
+Caveat that git does not cover: **the local databases are not version-controlled.** A v2 script applied to
+`jaftim-local-db` / `jaftim-local-db2` cannot be recovered or rolled back from git. Check the script table in
+`docs/DATABASE.md` against the databases before assuming they match this handoff.
+
+The legacy reference repo `C:\jaftimv2\Jaftim` is **not** a git repository - it has no history to inspect.

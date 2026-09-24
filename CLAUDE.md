@@ -57,20 +57,26 @@ handoff note, never an authority over code.
 6. Continue from the first valid entry in **Next Actions**. If it is already done or no longer makes sense, say so
    and correct `CURRENT_STATE.md` rather than silently doing something else.
 
-### How to reconcile (there is no git here)
+### How to reconcile
 
-**This repository is not under version control** - no `git status`, no history, no rollback. Do not run git
-commands expecting them to work, and never report git state you did not obtain. Reconcile with:
+This repository **is** under version control (since 2026-09-24), remote
+`https://github.com/shahabuddin1515-maker/jaftim-erp-server` - branches `master` (default), `staging`, `dev`.
+**The remote is public**; never commit anything you would not publish.
 
-- `dotnet build && dotnet test` - the fastest truthful check that the tree is where the handoff claims.
-- `ls database/v2/` against the script table in `docs/DATABASE.md`.
-- For database claims, query the local databases (`sqlcmd -S localhost -E -d jaftim-local-db`). Use `-I`
-  (QUOTED_IDENTIFIER ON) for anything that writes to `UserProfile`/`Inquiry`.
-- File modification times are the only "recent change" signal available.
+Reconcile in this order:
 
-Because nothing can be rolled back, prefer additive changes and look at a file before overwriting it. If the
-repository is ever placed under version control, make git status and recent history the primary reconciliation
-step and update this section.
+1. `git status` and `git log --oneline -15` - what changed, and whether the tree is clean.
+2. `git diff` / `git diff --stat` for uncommitted work the handoff may not mention.
+3. `dotnet build && dotnet test` - the truthful check that the tree is where the handoff claims.
+4. `ls database/v2/` against the script table in `docs/DATABASE.md`.
+5. For database claims, query the local databases (`sqlcmd -S localhost -E -d jaftim-local-db`). Use `-I`
+   (QUOTED_IDENTIFIER ON) for anything that writes to `UserProfile`/`Inquiry`.
+
+Git covers the source tree only. **The local databases are not version-controlled** - a schema change is not
+recoverable from git, so check the v2 script table before assuming a database is in the state the handoff claims.
+
+Branch use: `dev` for work in progress, `staging` for pre-release, `master` for released. Commit only when the
+owner asks; never force-push a shared branch.
 
 ### Update documentation during development, not at the end
 
@@ -109,7 +115,7 @@ checkpoint**. Do not try to preserve the conversation - preserve the repository.
 5. Update `CURRENT_STATE.md`: objective, WIP, verification state, blockers, relevant files, next actions.
 6. Record truthfully what was and was not tested. **Never claim verification you did not perform**; if work is
    half-finished, say exactly that.
-7. Reconcile as above (build/test; no git here).
+7. Reconcile as above (`git status`, `git log`, build/test).
 8. Leave concrete, ordered next actions whose first item is immediately actionable.
 9. Do not commit unless the owner explicitly asks.
 
