@@ -20,6 +20,10 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **User regions** (2026-10-05, Module 2 leftover): `GET/PUT /api/users/{id}/regions` over `UserRegion_Get`
+  (`database/v2/008`) and the legacy `AssignEntitiesToUser`. Owner decisions: countries stay the only access input
+  (whole divisions/groups expand at save time); no schema repair, the service validates. Model, rules and six
+  defects: `docs/USERS.md`.
 - **Messaging and job pipelines** (2026-10-05, owner decision): notifications and e-mail are separate durable outbox
   pipelines (`database/v2/007`), every job runs through `IJobRunner`. Design, guarantees and where each part runs:
   `docs/ARCHITECTURE.md` "Messaging and job pipelines"; recipes: `docs/CONVENTIONS.md`. `TenantScopeRunner` is gone.
@@ -43,10 +47,13 @@ Nothing is half-implemented. Not started:
 
 Verified on 2026-10-05 in this repository:
 
-- `dotnet build` - **no warnings, no errors**. `dotnet test` - **118 passing** (109 Application + 9 Api), 0 failing
-  (37 new: pipeline order/short-circuit, retry policy, processor settle paths, no-duplicate persist, push best-effort,
-  e-mail guard modes and SMTP classification, address rules, job tenant binding).
-- `v2/007` applied to **both** local tenants, re-run twice (idempotent).
+- `dotnet build` - **no warnings, no errors**. `dotnet test` - **127 passing** (118 Application + 9 Api), 0 failing.
+- `v2/007` and `v2/008` applied to **both** local tenants (`007` re-run twice - idempotent).
+- **Regions live run** (tenant `jaftim`, super admin): GET of 12461 shows its legacy drift (Africa ticked, Eastern
+  Africa not); PUT for staff user 135 (whole Oceania + whole Western Europe + Armenia) stored 26 countries and
+  exactly the 6 ancestor rows; `fn_GetUserAccessibleCountries(135)` = 26; the legacy read procedure shows no country
+  under an unticked group; invalid ids -> one 422 listing all; `0` -> 400; customer -> 422; unknown user -> 404;
+  `{}` cleared 135 back to zero rows. Audit rows deleted (`AuditLog` max 40 again).
 - **Live run, both hosts, tenant `jaftim`:** `POST /api/tagging/untag` as the super admin -> outbox row persisted as
   actor 1 and pushed; a real SignalR client signed in as `testsysadmin@gmail.com` (12459, a recipient) received it
   ~0.7 s after the request with all 12 payload fields. Rows inserted straight into the outboxes (no signal) were
@@ -70,7 +77,7 @@ of the known failing `StockStatus_RefreshOne` stocks) under default retry - harm
 
 No blockers. Owed by the owner/product, not blocking:
 
-1. **Release step for `v2/007`**: every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
+1. **Release step for `v2/007` and `v2/008`** (`008` only for the region endpoints): every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
    **before** this build is deployed there (without it notifications are logged as unqueueable and lost), and the API
    App Service needs `ConnectionStrings:Hangfire` (it now runs a Hangfire server). Live alone sets
    `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`.
@@ -84,7 +91,10 @@ No blockers. Owed by the owner/product, not blocking:
    reading the legacy action, the procedure and its table type, and how the legacy screen reports per-row errors.
 2. Decide captcha/rate-limiting, then port `POST /api/public/inquiries`.
 3. Optional: an admin read/requeue endpoint over outbox dead letters (today: `SELECT ... WHERE Status = 2`).
-4. Then Module 2 leftovers or Module 4 (its `SendResetLink` is the first real `IEmailDispatcher` caller).
+4. Then the remaining Module 2 leftovers (`OrgChart`, user sections/stocks/image) or Module 4 (its `SendResetLink`
+   is the first real `IEmailDispatcher` caller).
+5. Product, not blocking: tell the region admins that user 12461's Zimbabwe grant will be dropped if they save that
+   user on the **legacy** screen (`docs/USERS.md` defect 5); saving through v2 keeps it.
 
 ## Working Tree / Git Context
 

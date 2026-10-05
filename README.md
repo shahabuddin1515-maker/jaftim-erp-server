@@ -16,6 +16,7 @@ project built by another team against this API.
 - **Auth & tenancy**: [docs/AUTH.md](docs/AUTH.md) - JWT, shared catalog (accounts, tenants, sessions), one database per tenant, multiple/time-bound roles, audit.
 - **Modules, navigation & permissions**: [docs/NAVIGATION.md](docs/NAVIGATION.md) - module hierarchy (module -> screen -> action), navbar as backend data, role/permission admin API; contract for the frontend team.
 - **Inquiries, parties, Customer vs Contact**: [docs/INQUIRIES.md](docs/INQUIRIES.md) - what "contact" means, the stored PartyKind, snapshot-vs-current-truth, and the untouched lead-ingestion boundary.
+- **Users & regions**: [docs/USERS.md](docs/USERS.md) - divisions/groups/countries, why only countries decide data access, the region endpoints and the defects found.
 - **Notifications**: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) - raising events, the SignalR hub, the inbox endpoints and the routing admin (who receives what, as data).
 - **Database**: [docs/DATABASE.md](docs/DATABASE.md) - database-first, additive-only rules and the live inventory.
 - **Work list**: [docs/MIGRATION_INVENTORY.md](docs/MIGRATION_INVENTORY.md) - every legacy action -> v2 endpoint.

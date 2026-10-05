@@ -65,6 +65,7 @@ public static class DependencyInjection
         // Tenant repositories - one per module, all backed by stored procedures through IDbExecutor.
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
+        services.AddScoped<IUserRegionRepository, UserRegionRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IStockRepository, StockRepository>();
         services.AddScoped<IInquiryRepository, InquiryRepository>();

@@ -59,7 +59,8 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 | - (new: multiple / time-bound roles) | `GET/POST /api/users/{id}/roles`, `DELETE ./{roleId}`, `PUT ./primary` (`UserRole_*`, `UserProfile_SetPrimaryRole`) | 203/202 | done |
 | `RolesGetAll`, `RoleSave`, `AssignRoles` (GET/POST), `GetRoleRightsByRoleId` | `GET /api/roles`, `PUT /api/roles`, `GET /api/roles/{id}/permissions` (tree + granted), `PUT /api/roles/{id}/permissions` (`RoleActionMapping_Replace`, ancestors added, cache invalidated, audited) | 301/302/304 | done |
 | - (new) | `PUT /api/permissions` (create/rename/re-parent a RoleAction, ids 900+), `GET /api/permissions/catalog`; navigation upsert accepts `newPermissionName` - `docs/NAVIGATION.md` | 304 | done |
-| `AssignEntities`, `UserEntityHierarchy`, `OrgChart` | `GET/PUT /api/users/{id}/entities`, `GET /api/users/{id}/hierarchy`, `GET /api/org-chart` | 548 | todo |
+| `AssignEntities` (GET/POST), `UserEntityHierarchy`, UserDetail entity tab | `GET /api/users/{id}/regions` (203; full tree + selection, replaces both read views) · `PUT /api/users/{id}/regions` (548; whole divisions/groups expand to active countries, ancestor rows derived, validated, status row checked, audited) over `UserRegion_Get` (`v2/008`) + legacy `AssignEntitiesToUser`. Countries stay the only access input (owner, 2026-10-05) - `docs/USERS.md` | 203/548 | done |
+| `OrgChart` | `GET /api/org-chart` (`GetOrgChart`) | 548 | todo |
 | `NotificationSettingsController.*` | `GET /api/notification-settings/types`, `/types/{id}`, `PUT /types/{id}/settings` (active, strategy, system-admins), `PUT /types/{id}/roles` (replaces the set), `PUT /types/{id}/users` (grant/deny one staff user), `DELETE /types/{id}/users/{userId}`, `GET /roles`, `GET /users?query=`. Every change audited; routing applies on the next raise (no cache). | 904 (legacy gated `RoleId IN (1,10)`) | done |
 
 ## Module 3 - Inquiry, leads, tagging, public

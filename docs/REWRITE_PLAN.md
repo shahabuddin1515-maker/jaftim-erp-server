@@ -220,6 +220,9 @@ From README section 24; each needs an explicit product decision before its modul
 | `Inquiry_GetSectionById` selects from `Base_InquiryType`, which does not exist in any environment - it can never have worked | 3 | do not expose; `GET /api/inquiries/{id}` returns the fields instead |
 | 8 stocks fail `StockStatus_RefreshOne` (`RefreshCustomerStatus` NULL `FK_CustomerId`) | 5 | preserve - flag to product (see `docs/MIGRATION_INVENTORY.md`) |
 | `RoleActionMapping` covers only 10 of 22 roles (12 roles have **zero** actions) | 2 | seed before go-live, or those roles cannot use the API at all (deny by default) |
+| `AssignEntitiesToUser` returns its failure as a `500` result row; legacy never read it, so the region screen reported "saved" | 2 | fixed in the service: the row is checked and raised. `docs/USERS.md` defect 1 |
+| Region schema: `Entity` has no PK / parent FK / shape check, `Entity.ModifiedBy` is `datetime`, `UserEntities`/`UserCountries` are `int` with no FKs | 2 | preserve (owner, 2026-10-05): v2 validates the shape; repair is in the `docs/DATABASE.md` hardening backlog. `docs/USERS.md` defects 2-4 |
+| Ticked divisions/groups grant no access - `fn_GetUserAccessibleCountries` reads only `UserCountries` (entity branches commented out) | 2 | preserve (owner, 2026-10-05): countries stay the only source; v2 derives the countries from whole divisions/groups at save time. `docs/USERS.md` |
 | Hardcoded customer temp password | 4 | fix: crypto-random per user |
 | Lockout disabled, 6-char passwords | 0 | fixed |
 | Server-side permission check disabled | 0 | fixed |

@@ -40,7 +40,7 @@ Put durable knowledge in exactly one place. Do not copy it between files; cross-
 | `docs/DATABASE.md` | **Database rules (the authority), topology, the v2 script table, live inventory, hardening backlog** |
 | `docs/GETTING_STARTED.md` | Local bootstrap, running, smoke tests, troubleshooting |
 | `docs/MIGRATION_INVENTORY.md` | Per-action porting status - the progress record |
-| `docs/INQUIRIES.md`, `docs/NAVIGATION.md`, `docs/NOTIFICATIONS.md` | Durable business/module knowledge for those modules |
+| `docs/INQUIRIES.md`, `docs/NAVIGATION.md`, `docs/NOTIFICATIONS.md`, `docs/USERS.md` | Durable business/module knowledge for those modules |
 | `docs/CURRENT_STATE.md` | **Only** the immediate handoff: current objective, WIP, verification state, blockers, next actions |
 
 Precedence when documents disagree: **code, tests and the live database first**, then `docs/DATABASE.md` for

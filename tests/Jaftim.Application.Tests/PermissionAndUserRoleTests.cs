@@ -186,9 +186,13 @@ internal sealed class FakeUsers : IUserRepository
 {
     public Dictionary<long, int[]> RoleActions { get; } = [];
     public List<Role> Roles { get; init; } = [];
+    /// <summary>Per-id profile (null = not found). Ids not listed are an active Sales Executive.</summary>
+    public Dictionary<long, UserProfileWithRole?> Profiles { get; } = [];
 
     public Task<UserProfileWithRole?> GetByIdAsync(long userProfileId, CancellationToken ct = default) =>
-        Task.FromResult<UserProfileWithRole?>(new UserProfileWithRole { UserProfileId = userProfileId, RoleId = 2, RoleName = "Sales Executive", StatusId = 2, IsDeleted = 0 });
+        Task.FromResult(Profiles.TryGetValue(userProfileId, out UserProfileWithRole? profile)
+            ? profile
+            : new UserProfileWithRole { UserProfileId = userProfileId, RoleId = 2, RoleName = "Sales Executive", StatusId = 2, IsDeleted = 0 });
     public Task<UserProfileWithRole?> GetByEmailAsync(string email, CancellationToken ct = default) => Task.FromResult<UserProfileWithRole?>(null);
     public Task<UserProfileWithRole?> GetByAspNetUserIdAsync(string aspNetUserId, CancellationToken ct = default) => Task.FromResult<UserProfileWithRole?>(null);
     public Task<IReadOnlyList<RoleAction>> GetRoleActionsAsync(long roleId, CancellationToken ct = default) =>
