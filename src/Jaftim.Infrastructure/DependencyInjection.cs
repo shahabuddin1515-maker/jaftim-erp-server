@@ -66,6 +66,7 @@ public static class DependencyInjection
         services.AddScoped<IUserRepository, UserRepository>();
         services.AddScoped<IUserRoleRepository, UserRoleRepository>();
         services.AddScoped<IUserRegionRepository, UserRegionRepository>();
+        services.AddScoped<IRegionAdminRepository, RegionAdminRepository>();
         services.AddScoped<IRoleRepository, RoleRepository>();
         services.AddScoped<IStockRepository, StockRepository>();
         services.AddScoped<IInquiryRepository, InquiryRepository>();

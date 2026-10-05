@@ -60,6 +60,31 @@ Deliberate departures from legacy: the legacy screen refused to save an empty se
 one entity or country"); v2 allows it, because removing a leaver's regions is a real need. The legacy screen could
 store a ticked group with none of its countries, or a country whose group is unticked; v2 cannot produce either.
 
+### Region administration (`/api/regions`, new in v2)
+
+The legacy app had no screen for the tree; it was maintained by SQL script. v2 exposes it as master data under
+permission **905 "Master Data"** (Settings; seeded to the super admin only - grant it to other roles through
+`PUT /api/roles/{id}/permissions`). Every write returns the updated tree and is audited (`Region.*`).
+
+| Endpoint | Rule |
+|---|---|
+| `GET /api/regions` | the valid tree, plus `orphanGroups` (no or a missing division) and `unplacedCountries` (no existing group) |
+| `POST /divisions`, `PUT /divisions/{id}` | name 1-200, unique among divisions (trimmed, case-insensitive) -> 409 |
+| `POST /groups`, `PUT /groups/{id}` `{ name, divisionId }` | name unique among groups; the division must exist; `PUT` also moves a group (with its countries) or repairs an orphan |
+| `DELETE /divisions/{id}` · `/groups/{id}` | soft delete, only when empty (no groups / no countries) -> 422 otherwise; drops the region's `UserEntities` rows |
+| `PUT /countries/{id}/group` `{ groupId }` | the group must be under a division; also places an unplaced country |
+
+**No operation changes access** (`UserCountries`). But moving a country, or a group to another division, changes the
+ancestors of countries people hold, so `UserRegion_RederiveTicks` rewrites the `UserEntities` of every user holding
+an affected country to exactly the ancestors of what they hold - in the same transaction. Without that, the legacy
+screen would drop those grants on its next save. A side effect: those users' screen-only ticks (a ticked group with
+no granted country) are dropped, and their drift (defect 5) is repaired.
+
+Integrity is checked twice: in the service, for precise messages, and again inside each `database/v2/009`
+procedure under `UPDLOCK, HOLDLOCK` (`THROW 50000` -> 422), because the table itself enforces nothing. These are the
+first procedures that write `Entity`; they are compiled with `QUOTED_IDENTIFIER ON` (the filtered index, defect 4).
+`Entity.ModifiedBy` is a `datetime` column, so the actor is recorded in `AuditLog` only (`ModifiedAt` is set).
+
 ### Defects found here
 
 Recorded 2026-10-05 from the local copy. Nothing below was changed in the database (owner decision: validate in
@@ -75,8 +100,8 @@ v2; the schema repair belongs to the hardening backlog in `docs/DATABASE.md`).
 3. **Column types:** `Entity.ModifiedBy` is `datetime` (should be `bigint`); `UserEntities` / `UserCountries` store
    `UserId` and `EntityId`/`CountryId` as `int` against `bigint` keys, with no foreign keys; `AssignEntitiesToUser`
    takes `@UserId INT`.
-4. **Filtered index** `IX_Entity_ParentEntityId_Type` (`EntityTypeId = 2`): harmless while only scripts write
-   `Entity`, but any future procedure that writes it must be compiled with `QUOTED_IDENTIFIER ON`.
+4. **Filtered index** `IX_Entity_ParentEntityId_Type` (`EntityTypeId = 2`): any procedure that writes `Entity` must
+   be compiled with `QUOTED_IDENTIFIER ON` - the `v2/009` procedures are.
 5. **Ticks and grants drift on the legacy screen.** Locally one user has a ticked group missing two of its
    countries (a partial pick - legitimate) and user 12461 holds Zimbabwe with Africa ticked but its group (Eastern
    Africa) not - the legacy screen will drop that grant on the next save there. `GET` shows such cases

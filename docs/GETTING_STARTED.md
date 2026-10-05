@@ -23,6 +23,7 @@ sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/005_PartyKind_And_Inqu
 sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/006_CustomerSave_InquiryGuard.sql
 sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/007_Messaging_Outbox.sql
 sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/008_UserRegion.sql
+sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/009_RegionAdmin.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/001_UserRole.sql      # if you created the second tenant
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/002_AuditLog.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/003_Navigation.sql
@@ -31,6 +32,7 @@ sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/005_PartyKind_And_Inqu
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/006_CustomerSave_InquiryGuard.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/007_Messaging_Outbox.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/008_UserRegion.sql
+sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/009_RegionAdmin.sql
 ```
 Pass `-I` (QUOTED_IDENTIFIER ON) to any ad-hoc `sqlcmd` that writes to `UserProfile` or `Inquiry`; those tables
 carry computed/indexed objects that reject the sqlcmd default. The scripts above set it themselves.

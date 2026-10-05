@@ -118,7 +118,7 @@ public sealed class UserRegionService(
     public async Task<UserRegionsResponse> GetAsync(long userProfileId, CancellationToken ct = default)
     {
         await EnsureUserAsync(userProfileId, ct);
-        return RegionTree.From(await regions.GetAsync(userProfileId, ct)).ToResponse(userProfileId);
+        return RegionTree.From(await regions.GetAsync(userProfileId, ct)).ToUserResponse(userProfileId);
     }
 
     public async Task<UserRegionsResponse> SaveAsync(long userProfileId, SaveUserRegionsRequest request, CancellationToken ct = default)
@@ -140,113 +140,11 @@ public sealed class UserRegionService(
         await audit.RecordAsync("UserProfile.RegionsChanged", "UserProfile", userProfileId,
             new { EntityIds = before.TickedEntityIds.Order(), CountryIds = before.GrantedCountryIds.Order() },
             new { EntityIds = entityIds, CountryIds = countryIds }, ct);
-        return RegionTree.From(after).ToResponse(userProfileId);
+        return RegionTree.From(after).ToUserResponse(userProfileId);
     }
 
     private async Task<UserProfileWithRole> EnsureUserAsync(long userProfileId, CancellationToken ct) =>
         await users.GetByIdAsync(userProfileId, ct) is { } u && (u.IsDeleted ?? 0) == 0
             ? u
             : throw new NotFoundException("User", userProfileId);
-
-    /// <summary>The valid Division -> Group -> Country tree of one snapshot. Rows that break the shape are left out.</summary>
-    private sealed class RegionTree
-    {
-        private readonly Dictionary<long, RegionEntityRow> _divisions;
-        private readonly Dictionary<long, RegionEntityRow> _groups;               // only groups under a valid division
-        private readonly Dictionary<long, RegionCountryRow> _countries;           // every non-deleted country
-        private readonly ILookup<long, RegionCountryRow> _countriesByGroup;       // placed countries only
-        private readonly HashSet<long> _ticked;
-        private readonly HashSet<long> _granted;
-
-        private RegionTree(UserRegionSnapshot s)
-        {
-            _divisions = s.Entities.Where(e => e.EntityTypeId == RegionEntityTypes.Division && e.ParentEntityId is null)
-                .ToDictionary(e => e.EntityId);
-            _groups = s.Entities.Where(e => e.EntityTypeId == RegionEntityTypes.Group
-                    && e.ParentEntityId is { } parent && _divisions.ContainsKey(parent))
-                .ToDictionary(e => e.EntityId);
-            _countries = s.Countries.ToDictionary(c => c.CountryId);
-            _countriesByGroup = s.Countries.Where(IsPlaced).ToLookup(c => c.GroupEntityId!.Value);
-            _ticked = s.TickedEntityIds.ToHashSet();
-            _granted = s.GrantedCountryIds.ToHashSet();
-        }
-
-        public static RegionTree From(UserRegionSnapshot snapshot) => new(snapshot);
-
-        private bool IsPlaced(RegionCountryRow c) => c.GroupEntityId is { } g && _groups.ContainsKey(g);
-
-        private IEnumerable<RegionEntityRow> GroupsOf(long divisionId) =>
-            _groups.Values.Where(g => g.ParentEntityId == divisionId);
-
-        /// <summary>Validates the request against the tree and returns the rows to store.</summary>
-        public (SortedSet<long> EntityIds, SortedSet<long> CountryIds) Resolve(SaveUserRegionsRequest request, HashSet<long> alreadyGranted)
-        {
-            long[] divisionIds = (request.DivisionIds ?? []).Distinct().ToArray();
-            long[] groupIds = (request.GroupIds ?? []).Distinct().ToArray();
-            long[] countryIds = (request.CountryIds ?? []).Distinct().ToArray();
-
-            var problems = new List<string>();
-            Report(problems, "Unknown division(s)", divisionIds.Where(id => !_divisions.ContainsKey(id)));
-            Report(problems, "Unknown group(s), or group(s) not under a division", groupIds.Where(id => !_groups.ContainsKey(id)));
-            Report(problems, "Unknown country(ies)", countryIds.Where(id => !_countries.ContainsKey(id)));
-            Report(problems, "Country(ies) not in any group", countryIds.Where(id => _countries.TryGetValue(id, out var c) && !IsPlaced(c)));
-            Report(problems, "Inactive country(ies) cannot be newly assigned", countryIds.Where(id =>
-                _countries.TryGetValue(id, out var c) && IsPlaced(c) && !c.IsActive && !alreadyGranted.Contains(id)));
-            if (problems.Count > 0) throw new BusinessRuleException(string.Join(" ", problems));
-
-            var countries = new SortedSet<long>(countryIds);
-            foreach (long divisionId in divisionIds)
-                foreach (RegionEntityRow group in GroupsOf(divisionId))
-                    countries.UnionWith(ActiveCountryIds(group.EntityId));
-            foreach (long groupId in groupIds)
-                countries.UnionWith(ActiveCountryIds(groupId));
-
-            // Division/group rows = exactly the ancestors of the granted countries.
-            var entities = new SortedSet<long>();
-            foreach (long countryId in countries)
-            {
-                long groupId = _countries[countryId].GroupEntityId!.Value;
-                entities.Add(groupId);
-                entities.Add(_groups[groupId].ParentEntityId!.Value);
-            }
-            return (entities, countries);
-        }
-
-        private IEnumerable<long> ActiveCountryIds(long groupId) =>
-            _countriesByGroup[groupId].Where(c => c.IsActive).Select(c => c.CountryId);
-
-        private static void Report(List<string> problems, string label, IEnumerable<long> ids)
-        {
-            long[] bad = ids.ToArray();
-            if (bad.Length > 0) problems.Add($"{label}: {string.Join(", ", bad)}.");
-        }
-
-        public UserRegionsResponse ToResponse(long userProfileId)
-        {
-            var divisions = _divisions.Values.OrderBy(d => d.EntityName).Select(d =>
-            {
-                var groups = GroupsOf(d.EntityId).OrderBy(g => g.EntityName).Select(g =>
-                {
-                    RegionCountryRow[] countries = _countriesByGroup[g.EntityId].OrderBy(c => c.CountryName).ToArray();
-                    return new RegionGroupNode(g.EntityId, g.EntityName, SelectionOf(countries), _ticked.Contains(g.EntityId),
-                        countries.Select(Node).ToList());
-                }).ToList();
-                RegionCountryRow[] all = GroupsOf(d.EntityId).SelectMany(g => _countriesByGroup[g.EntityId]).ToArray();
-                return new RegionDivisionNode(d.EntityId, d.EntityName, SelectionOf(all), _ticked.Contains(d.EntityId), groups);
-            }).ToList();
-
-            var unplaced = _countries.Values.Where(c => !IsPlaced(c)).OrderBy(c => c.CountryName).Select(Node).ToList();
-            return new UserRegionsResponse(userProfileId, divisions, _granted.Order().ToList(), unplaced);
-        }
-
-        private RegionCountryNode Node(RegionCountryRow c) => new(c.CountryId, c.CountryName, c.IsActive, _granted.Contains(c.CountryId));
-
-        /// <summary>All = every active country held; Partial = some country held; None otherwise.</summary>
-        private RegionSelection SelectionOf(IReadOnlyCollection<RegionCountryRow> countries)
-        {
-            int active = countries.Count(c => c.IsActive);
-            if (active > 0 && countries.Count(c => c.IsActive && _granted.Contains(c.CountryId)) == active) return RegionSelection.All;
-            return countries.Any(c => _granted.Contains(c.CountryId)) ? RegionSelection.Partial : RegionSelection.None;
-        }
-    }
 }

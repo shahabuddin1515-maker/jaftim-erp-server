@@ -20,6 +20,8 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **Region administration** (2026-10-05, new in v2): `/api/regions` - divisions/groups CRUD and moving countries,
+  permission 905, over `database/v2/009`. Moves re-derive holders' tick rows; access never changes. `docs/USERS.md`.
 - **User regions** (2026-10-05, Module 2 leftover): `GET/PUT /api/users/{id}/regions` over `UserRegion_Get`
   (`database/v2/008`) and the legacy `AssignEntitiesToUser`. Owner decisions: countries stay the only access input
   (whole divisions/groups expand at save time); no schema repair, the service validates. Model, rules and six
@@ -47,8 +49,15 @@ Nothing is half-implemented. Not started:
 
 Verified on 2026-10-05 in this repository:
 
-- `dotnet build` - **no warnings, no errors**. `dotnet test` - **127 passing** (118 Application + 9 Api), 0 failing.
-- `v2/007` and `v2/008` applied to **both** local tenants (`007` re-run twice - idempotent).
+- `dotnet build` - **no warnings, no errors**. `dotnet test` - **134 passing** (125 Application + 9 Api), 0 failing.
+  (Last run on a copy of the tree in the scratchpad, because the owner's Visual Studio debug session held the API's
+  DLLs; run `dotnet build && dotnet test` in place once it is stopped.)
+- `v2/007`, `v2/008`, `v2/009` applied to **both** local tenants (`007` re-run twice - idempotent).
+- **Region admin live run** (scratch API on :5140, super admin): create division/group, duplicate name 409, group
+  under a group 422, rename, delete non-empty 422; moved Zimbabwe (12 holders) into the test group -> all 12 got
+  exactly its new group+division ticks, holders and access unchanged; moved the group to Africa and Zimbabwe back,
+  deleted both, 404/400 cases. Then **fully reverted**: `UserEntities` restored from a backup (0 rows differ, backup
+  table dropped), Zimbabwe's row restored, test `Entity` rows deleted and identity reseeded to 29, audit rows deleted.
 - **Regions live run** (tenant `jaftim`, super admin): GET of 12461 shows its legacy drift (Africa ticked, Eastern
   Africa not); PUT for staff user 135 (whole Oceania + whole Western Europe + Armenia) stored 26 countries and
   exactly the 6 ancestor rows; `fn_GetUserAccessibleCountries(135)` = 26; the legacy read procedure shows no country
@@ -77,7 +86,7 @@ of the known failing `StockStatus_RefreshOne` stocks) under default retry - harm
 
 No blockers. Owed by the owner/product, not blocking:
 
-1. **Release step for `v2/007` and `v2/008`** (`008` only for the region endpoints): every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
+1. **Release step for `v2/007`, `v2/008`, `v2/009`** (`008`/`009` only for the region endpoints): every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
    **before** this build is deployed there (without it notifications are logged as unqueueable and lost), and the API
    App Service needs `ConnectionStrings:Hangfire` (it now runs a Hangfire server). Live alone sets
    `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`.
