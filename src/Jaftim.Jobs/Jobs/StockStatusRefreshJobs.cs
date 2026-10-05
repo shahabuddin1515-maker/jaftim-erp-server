@@ -1,6 +1,7 @@
 using System.Data;
 using Hangfire;
 using Jaftim.Application.Abstractions;
+using Jaftim.Application.Jobs;
 using Jaftim.Infrastructure.Data;
 
 namespace Jaftim.Jobs.Jobs;
@@ -19,23 +20,23 @@ namespace Jaftim.Jobs.Jobs;
 /// README section 11.2 documents the enqueue-predicate invariant: never widen the enqueue query beyond what the
 /// refresh can actually change, or stocks loop forever at 8 procedure calls a minute.
 /// </summary>
-public sealed class StockStatusOutboxEnqueueJob(TenantScopeRunner tenants, IDbExecutor db, ILogger<StockStatusOutboxEnqueueJob> logger)
+public sealed class StockStatusOutboxEnqueueJob(IJobRunner jobs, IDbExecutor db, ILogger<StockStatusOutboxEnqueueJob> logger)
 {
     public const string Id = "stock-status-outbox-enqueue";
     public const string Cron = "* * * * *";
 
     [DisableConcurrentExecution(timeoutInSeconds: 55)]
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(string tenantCode, CancellationToken ct)
-    {
-        await tenants.BindAsync(tenantCode, ct);
-        await db.ExecuteAsync(
-            SpCall.Procedure("StockStatusRefreshOutbox_EnqueueTimeDependent").WithoutAudit().WithTimeout(60), ct);
-        logger.LogDebug("StockStatusRefreshOutbox_EnqueueTimeDependent ran");
-    }
+    public Task RunAsync(string tenantCode, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode), async c =>
+        {
+            await db.ExecuteAsync(
+                SpCall.Procedure("StockStatusRefreshOutbox_EnqueueTimeDependent").WithoutAudit().WithTimeout(60), c);
+            logger.LogDebug("StockStatusRefreshOutbox_EnqueueTimeDependent ran");
+        }, ct);
 }
 
-public sealed class StockStatusOutboxDispatchJob(TenantScopeRunner tenants, IDbExecutor db, IJobScheduler scheduler, ILogger<StockStatusOutboxDispatchJob> logger)
+public sealed class StockStatusOutboxDispatchJob(IJobRunner jobs, IDbExecutor db, IJobScheduler scheduler, ILogger<StockStatusOutboxDispatchJob> logger)
 {
     public const string Id = "stock-status-outbox-dispatch";
     public const string Cron = "* * * * *";
@@ -45,59 +46,61 @@ public sealed class StockStatusOutboxDispatchJob(TenantScopeRunner tenants, IDbE
 
     [DisableConcurrentExecution(timeoutInSeconds: 55)]
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(string tenantCode, CancellationToken ct)
-    {
-        await tenants.BindAsync(tenantCode, ct);
-        int dispatched = 0;
-        for (int batch = 0; batch < MaxBatchesPerRun && !ct.IsCancellationRequested; batch++)
+    public Task RunAsync(string tenantCode, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode), async c =>
         {
-            IReadOnlyList<OutboxItem> items = await db.QueryAsync<OutboxItem>(
-                SpCall.Procedure("StockStatusRefreshOutbox_Claim")
-                    .With("@BatchSize", BatchSize)
-                    .With("@LeaseSeconds", LeaseSeconds)
-                    .WithoutAudit(), ct);
+            int dispatched = 0;
+            for (int batch = 0; batch < MaxBatchesPerRun && !c.IsCancellationRequested; batch++)
+            {
+                IReadOnlyList<OutboxItem> items = await db.QueryAsync<OutboxItem>(
+                    SpCall.Procedure("StockStatusRefreshOutbox_Claim")
+                        .With("@BatchSize", BatchSize)
+                        .With("@LeaseSeconds", LeaseSeconds)
+                        .WithoutAudit(), c);
 
-            if (items.Count == 0) break;
+                if (items.Count == 0) break;
 
-            foreach (OutboxItem item in items)
-                scheduler.Enqueue<StockStatusRefreshOneJob>(j => j.RunAsync(tenantCode, item.OutboxId, item.StockId, item.LeaseId, CancellationToken.None), JobQueues.StockStatus);
+                foreach (OutboxItem item in items)
+                    scheduler.Enqueue<StockStatusRefreshOneJob>(j => j.RunAsync(tenantCode, item.OutboxId, item.StockId, item.LeaseId, CancellationToken.None), JobQueues.StockStatus);
 
-            dispatched += items.Count;
-            if (items.Count < BatchSize) break;
-        }
+                dispatched += items.Count;
+                if (items.Count < BatchSize) break;
+            }
 
-        if (dispatched > 0) logger.LogInformation("Dispatched {Count} stock-status refresh jobs", dispatched);
-    }
+            if (dispatched > 0) logger.LogInformation("Dispatched {Count} stock-status refresh jobs", dispatched);
+        }, ct);
 
     /// <summary>Column order/names of StockStatusRefreshOutbox_Claim: OutboxId, StockId, EventType, CreatedAtUtc, LeaseId.</summary>
     public sealed record OutboxItem(long OutboxId, long StockId, string EventType, DateTime CreatedAtUtc, Guid LeaseId);
 }
 
-public sealed class StockStatusRefreshOneJob(TenantScopeRunner tenants, IDbExecutor db, ILogger<StockStatusRefreshOneJob> logger)
+public sealed class StockStatusRefreshOneJob(IJobRunner jobs, IDbExecutor db, ILogger<StockStatusRefreshOneJob> logger)
 {
+    public const string Id = "stock-status-refresh-one";
+
     // The lease is 120s; retrying beyond it would race a re-claim, so retries stay inside that window.
     [AutomaticRetry(Attempts = 2, DelaysInSeconds = [10, 30])]
-    public async Task RunAsync(string tenantCode, long outboxId, long stockId, Guid leaseId, CancellationToken ct)
-    {
-        await tenants.BindAsync(tenantCode, ct);
-        try
+    public Task RunAsync(string tenantCode, long outboxId, long stockId, Guid leaseId, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode), async c =>
         {
-            await db.ExecuteAsync(
-                SpCall.Procedure("StockStatus_RefreshOne").With("@StockId", stockId).WithoutAudit().WithTimeout(120), ct);
-            await db.ExecuteAsync(
-                SpCall.Procedure("StockStatusRefreshOutbox_MarkPublished")
-                    .With("@OutboxId", outboxId).With("@LeaseId", leaseId).WithoutAudit(), ct);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Stock-status refresh failed for stock {StockId} (outbox {OutboxId})", stockId, outboxId);
-            await db.ExecuteAsync(
-                SpCall.Procedure("StockStatusRefreshOutbox_MarkFailed")
-                    .With("@OutboxId", outboxId)
-                    .With("@LeaseId", leaseId)
-                    .With("@LastError", ex.Message[..Math.Min(ex.Message.Length, 2000)], DbType.String)
-                    .WithoutAudit(), CancellationToken.None);
-            throw;
-        }
-    }
+            try
+            {
+                await db.ExecuteAsync(
+                    SpCall.Procedure("StockStatus_RefreshOne").With("@StockId", stockId).WithoutAudit().WithTimeout(120), c);
+                await db.ExecuteAsync(
+                    SpCall.Procedure("StockStatusRefreshOutbox_MarkPublished")
+                        .With("@OutboxId", outboxId).With("@LeaseId", leaseId).WithoutAudit(), c);
+            }
+            catch (Exception ex)
+            {
+                logger.LogWarning(ex, "Stock-status refresh failed for stock {StockId} (outbox {OutboxId})", stockId, outboxId);
+                await db.ExecuteAsync(
+                    SpCall.Procedure("StockStatusRefreshOutbox_MarkFailed")
+                        .With("@OutboxId", outboxId)
+                        .With("@LeaseId", leaseId)
+                        .With("@LastError", ex.Message[..Math.Min(ex.Message.Length, 2000)], DbType.String)
+                        .WithoutAudit(), CancellationToken.None);
+                throw;
+            }
+        }, ct);
 }

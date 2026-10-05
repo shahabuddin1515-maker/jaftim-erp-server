@@ -35,12 +35,32 @@ builder.Services.AddHttpContextAccessor();
 builder.Services.AddScoped<ICurrentUser, CurrentUser>();
 builder.Services.AddScoped<IAuditRequestContext, HttpAuditRequestContext>();
 
-// Hangfire client only (no server here): lets the API enqueue jobs that Jaftim.Jobs executes.
+// Hangfire: the API enqueues jobs that Jaftim.Jobs executes, and consumes exactly one queue itself -
+// "notifications" - because the notification pipeline's push step needs this host's SignalR hub
+// (docs/ARCHITECTURE.md "Messaging and job pipelines").
 builder.Services.AddHangfire(config => config
     .SetDataCompatibilityLevel(CompatibilityLevel.Version_180)
     .UseSimpleAssemblyNameTypeSerializer()
     .UseRecommendedSerializerSettings()
-    .UseSqlServerStorage(builder.Configuration.GetConnectionString("Hangfire")));
+    .UseSqlServerStorage(builder.Configuration.GetConnectionString("Hangfire"), new Hangfire.SqlServer.SqlServerStorageOptions
+    {
+        // Short poll so a notification reaches the bell within a second or two of the action that raised it.
+        QueuePollInterval = TimeSpan.FromSeconds(builder.Configuration.GetValue("Messaging:Notifications:PollSeconds", 1)),
+        UseRecommendedIsolationLevel = true,
+        DisableGlobalLocks = true,
+    }));
+if (builder.Configuration.GetValue("Messaging:Notifications:ProcessInApi", true))
+{
+    builder.Services.AddHangfireServer(options =>
+    {
+        // Workers only. A full server would also run the recurring/delayed schedulers and expiration manager, which
+        // pick up jobs of EVERY type - the Jaftim.Jobs ones this host cannot load - and fail them (seen 2026-10-05).
+        options.IsLightweightServer = true;
+        options.ServerName = $"api:{Environment.MachineName}:{Environment.ProcessId}";
+        options.Queues = [JobQueues.Notifications];
+        options.WorkerCount = builder.Configuration.GetValue("Messaging:Notifications:WorkerCount", 2);
+    });
+}
 
 // ---------- Authentication: JWT bearer ----------
 AuthOptions authOptions = builder.Configuration.GetSection(AuthOptions.SectionName).Get<AuthOptions>() ?? new AuthOptions();

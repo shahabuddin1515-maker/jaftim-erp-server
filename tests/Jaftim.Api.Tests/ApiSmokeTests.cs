@@ -47,6 +47,7 @@ public sealed class ApiSmokeTests : IClassFixture<ApiSmokeTests.Factory>
             builder.UseSetting("ConnectionStrings:Catalog", "Server=(local);Database=none;Integrated Security=true;TrustServerCertificate=true");
             builder.UseSetting("ConnectionStrings:Hangfire", "Server=(local);Database=none;Integrated Security=true;TrustServerCertificate=true");
             builder.UseSetting("Auth:SigningKey", "integration-test-signing-key-32-bytes-min!!");
+            builder.UseSetting("Messaging:Notifications:ProcessInApi", "false"); // no Hangfire database here
         }
     }
 }

@@ -21,12 +21,14 @@ sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/003_Navigation.sql
 sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/004_PermissionHierarchy.sql
 sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/005_PartyKind_And_Inquiry.sql
 sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/006_CustomerSave_InquiryGuard.sql
+sqlcmd -S localhost -E -d jaftim-local-db  -i database/v2/007_Messaging_Outbox.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/001_UserRole.sql      # if you created the second tenant
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/002_AuditLog.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/003_Navigation.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/004_PermissionHierarchy.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/005_PartyKind_And_Inquiry.sql
 sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/006_CustomerSave_InquiryGuard.sql
+sqlcmd -S localhost -E -d jaftim-local-db2 -i database/v2/007_Messaging_Outbox.sql
 ```
 Pass `-I` (QUOTED_IDENTIFIER ON) to any ad-hoc `sqlcmd` that writes to `UserProfile` or `Inquiry`; those tables
 carry computed/indexed objects that reject the sqlcmd default. The scripts above set it themselves.
@@ -58,7 +60,15 @@ dotnet user-secrets set "ConnectionStrings:Catalog"  "<same as API>"
 dotnet user-secrets set "ConnectionStrings:Hangfire" "<same as API>"
 dotnet user-secrets set "Hangfire:Dashboard:Password" "<any local password>"
 ```
-Both hosts must share `ConnectionStrings:Hangfire`; the API only enqueues, Jobs executes.
+Both hosts must share `ConnectionStrings:Hangfire`. The API enqueues, and also consumes the `notifications` queue
+itself (realtime push needs its hub); Jobs executes everything else. Run **both** to see a notification arrive.
+
+E-mail is **suppressed** by default (`EmailDelivery:Mode = Suppress` - the local data has real customer addresses).
+To see real mail locally, redirect it to yourself, never `Send`:
+```
+dotnet user-secrets set "EmailDelivery:Mode" "Redirect"       --project src/Jaftim.Jobs
+dotnet user-secrets set "EmailDelivery:RedirectTo" "<you>@<domain>" --project src/Jaftim.Jobs
+```
 UAT/Live get the same keys through App Service settings / Key Vault when the v2 scripts are promoted there.
 
 `SystemUser:UserProfileId` (both hosts) must be an active staff `UserProfile` - it is `@CreatedBy` for everything
@@ -120,6 +130,10 @@ See `docs/ARCHITECTURE.md`. Start with `docs/REWRITE_PLAN.md`, then `docs/CONVEN
 - 403 on an endpoint the user "should" have -> the role has no `RoleActionMapping` row for that ActionId. 12 roles
   have none at all (docs/DATABASE.md query).
 - Hangfire dashboard 401 -> `Hangfire:Dashboard:Password` not set.
+- A notification never arrives -> look at `SELECT * FROM NotificationOutbox ORDER BY OutboxId DESC`: `Status 0` with
+  no lease = no API host is consuming `notifications`; `Status 2` = dead letter, the reason is in `LastError`.
+- An e-mail never arrives -> `EmailOutbox` likewise; `Status 1` with no mail = `EmailDelivery:Mode` is `Suppress`
+  (the Jobs log says "suppressed").
 
 ## 7. API documentation (Swagger)
 - `http://localhost:5120/swagger` - Swagger UI. Click **Authorize**, paste the `accessToken` from `POST /api/auth/login`

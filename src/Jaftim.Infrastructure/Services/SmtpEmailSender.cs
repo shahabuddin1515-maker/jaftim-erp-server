@@ -18,8 +18,8 @@ public sealed class EmailOptions
 }
 
 /// <summary>
-/// Straight port of the legacy EmailService transport. Send email from a Hangfire job (IJobScheduler), not inline
-/// in a request, so SMTP latency/failures never affect the API response.
+/// Straight port of the legacy EmailService transport. Only the email pipeline's SendEmailStep calls it; business
+/// code queues mail through IEmailDispatcher, so SMTP latency/failures never affect an API response and are retried.
 /// </summary>
 public sealed class SmtpEmailSender(IOptions<EmailOptions> options) : IEmailSender
 {

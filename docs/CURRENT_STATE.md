@@ -1,6 +1,6 @@
 # Current Development State
 
-Last updated: 2026-09-24 (customer tagging module ported)
+Last updated: 2026-10-05 (messaging and job pipelines)
 
 > Handoff only. This file is **not** authoritative over code, tests, the database or the other docs - if it
 > disagrees with them, they win and this file is stale. Permanent knowledge belongs in the documents listed in
@@ -9,24 +9,24 @@ Last updated: 2026-09-24 (customer tagging module ported)
 ## Current Phase / Module
 
 **Module 3 - Inquiry, leads, tagging, public** (`docs/MIGRATION_INVENTORY.md`). Modules 0, 1 and 2 are done apart
-from the leftovers listed there.
+from the leftovers listed there. A platform change was inserted on 2026-10-05 (below); Module 3 resumes next.
 
 ## Current Objective
 
-Finish the remaining Module 3 surface. Inquiry read, add/update, single and bulk tag/untag, and the customer
-tagging module are complete; what is left is bulk inquiry import and the public endpoint.
+Finish the remaining Module 3 surface: bulk inquiry import and the public endpoint. Inquiry read, add/update, single
+and bulk tag/untag, and the customer tagging module are complete.
 
 No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
-- **Customer tagging module** (2026-09-24): `/api/tagging` - agents, an agent's customers/history, `/me/...`
-  (907), available customers, tag, untag. New `Tagging` module (`TaggingService`, `TaggingRepository`); it now owns
-  every `CustomerTagging` write outside the inquiry procedure, and inquiry bulk-untag goes through it. Rules,
-  visibility and defects 5-7: `docs/INQUIRIES.md` → "Customer tagging".
-- **Bulk tag/untag** (2026-09-24): `POST /api/inquiries/tag-bulk`, `/untag-bulk`; the single inquiry tag now
-  notifies and refuses an unlinked inquiry (defect 4).
-- **Inquiry add path** (2026-09-23) and `database/v2/006` (the `CustomerSave` guard repair).
+- **Messaging and job pipelines** (2026-10-05, owner decision): notifications and e-mail are separate durable outbox
+  pipelines (`database/v2/007`), every job runs through `IJobRunner`. Design, guarantees and where each part runs:
+  `docs/ARCHITECTURE.md` "Messaging and job pipelines"; recipes: `docs/CONVENTIONS.md`. `TenantScopeRunner` is gone.
+  Found and fixed on the way (all silent before - see `docs/NOTIFICATIONS.md`): no realtime push had ever reached a
+  client (payload mapping threw after commit; hub joined `t0-user-…`); `DbExecutor.InTransactionAsync` masked a
+  procedure's own rollback with "transaction has completed".
+- **Customer tagging module** and **bulk tag/untag** (2026-09-24) - `docs/INQUIRIES.md`.
 
 ## Work In Progress
 
@@ -34,84 +34,60 @@ Nothing is half-implemented. Not started:
 
 | Not started | Legacy source | Notes |
 |---|---|---|
-| `POST /api/inquiries/bulk` | `InquiryController.BulkInquirySave` | `BulkInquiryImport_V2` (TVP) exists; wants a Hangfire job with progress. |
+| `POST /api/inquiries/bulk` | `InquiryController.BulkInquirySave` | `BulkInquiryImport_V2` (TVP) exists; a Hangfire job with progress, through `IJobRunner`. |
 | `POST /api/public/inquiries` | `PublicController.InquirySave` | Anonymous; needs a captcha/rate-limit decision. |
 
-**Explicitly not scheduled:** porting the `JaftimWebhooks` Azure Function / lead ingestion. Owner instruction
-(2026-09-23): it keeps running as-is and the ingestion chain stays untouched. Do not start it without being asked.
+**Explicitly not scheduled:** porting the `JaftimWebhooks` Azure Function / lead ingestion (owner, 2026-09-23).
 
 ## Current Verification State
 
-Verified on 2026-09-24 in this repository:
+Verified on 2026-10-05 in this repository:
 
-- `dotnet build` - **no warnings, no errors**. `dotnet test` - **81 passing** (72 Application + 9 Api), 0 failing.
-- Local databases: `v2/001`-`006` present in both `jaftim-local-db` and `jaftim-local-db2`; the `v2/006` patch
-  marker confirmed in `CustomerSave` in both.
-- **Tagging module run against the local API, tenant `jaftim`, as the super admin:** agents (29), agent 133's
-  customers (56) and history (6), available (851 → 849 after two tags), limit-0 agent → 422, agent with no
-  divisions → 422, limit-1 agent: first tag 200 then 422, NULL-limit agent → 200, id 0 → 400, untag → 200 and
-  shows in history, `/me/customers` → 403 (super admin lacks 907, as seeded). Database: tag rows, 3 audit rows,
-  3 notifications (none for rejections). Defect 6 reproduced. **All test rows deleted afterwards** (baselines:
-  `CustomerTagging` max 265, `Notification` max 94, `AuditLog` max 40).
-- **As Sales Executive 149** (role 2): `/me/customers` → 31 (= its active tags), `/me/history` → 0, `/agents` →
-  200 empty (149 has no divisions), 551/552/550 routes → 403 (local role 2 holds only 526 and 907). The
-  procedure-level "self only" filter is therefore unreachable for role 2 through the API today.
-  Local-only side effect: `tools/set-local-password.ps1` set `LocalTest1234` for `faizan1812@jaftim.com` (149) and
-  `smaffan1589@jaftim.com` (133, whose catalog account is inactive - login still refused).
-- **Bulk inquiry tag/untag** run the same way earlier the same day (partial success, 422, 400), rows cleaned up.
+- `dotnet build` - **no warnings, no errors**. `dotnet test` - **118 passing** (109 Application + 9 Api), 0 failing
+  (37 new: pipeline order/short-circuit, retry policy, processor settle paths, no-duplicate persist, push best-effort,
+  e-mail guard modes and SMTP classification, address rules, job tenant binding).
+- `v2/007` applied to **both** local tenants, re-run twice (idempotent).
+- **Live run, both hosts, tenant `jaftim`:** `POST /api/tagging/untag` as the super admin -> outbox row persisted as
+  actor 1 and pushed; a real SignalR client signed in as `testsysadmin@gmail.com` (12459, a recipient) received it
+  ~0.7 s after the request with all 12 payload fields. Rows inserted straight into the outboxes (no signal) were
+  picked up by the sweep: a notification delivered + pushed, an unknown type code dead-lettered on attempt 1 with the
+  real SQL error, an e-mail processed by the Jobs host and suppressed. Hangfire servers: API = `notifications` only
+  (lightweight), Jobs = everything else. **All test rows deleted** (baselines restored: `Notification` max 94,
+  `AuditLog` max 40, `CustomerTagging` max 265, outboxes empty).
 
 Not verified / no coverage:
 
-- No integration test hits a real database - every test uses fakes. The procedure calls are covered only by the
-  manual runs above.
-- `jaftim-local-db2` has never had an inquiry created or tagged against it.
-- UAT not checked for active NULL-customer tags (defect 7 query, read-only).
+- **No real SMTP send** (no SMTP settings locally) and Redirect mode only in unit tests.
+- The rollback-masking fix is unit-reasoned, not exercised live (needs a procedure failing after its own BEGIN TRAN).
+- `jaftim-local-db2` never ran a notification or e-mail through the pipeline. Scale-out (two API instances) untried.
+- No integration test hits a real database - every automated test uses fakes.
+
+Local-only side effects of this session: `tools/set-local-password.ps1` set `LocalTest1234` for
+`testsysadmin@gmail.com`; the first API start (before `IsLightweightServer`) re-scheduled Hangfire jobs 159/160 (two
+of the known failing `StockStatus_RefreshOne` stocks) under default retry - harmless, they fail as before.
 
 ## Open Questions / Blockers
 
 No blockers. Owed by the owner/product, not blocking:
 
-1. **Promoting `database/v2/006` to UAT/Live** - until then every new enquirer added on UAT/Live still fails.
-2. 12 roles have zero `RoleActionMapping` rows, so they are locked out of the API. Seed before go-live
-   (query in `docs/DATABASE.md`).
-3. Tagging product questions (`docs/REWRITE_PLAN.md` §7): should inquiry-path tagging enforce the limit and
-   divisions; should reassignment show in the previous agent's history / notify them (needs a `_V2` procedure).
-
-## Important Recent Discoveries
-
-Already in the permanent docs; delete from here once no longer recent.
-
-1. `CustomerTagging_TagCustomerToAgent` returns rejections as a result row; legacy notified on them (defect 5).
-   A NULL `CustomerTagLimit` means unlimited.
-2. Two tagging paths, two rule sets: the inquiry path skips the limit and division checks.
-3. Reassignment is invisible in the previous agent's history (defect 6); one NULL-customer tag would empty
-   Available Customers (defect 7).
-4. `GetInquiryAll` does not return unlinked inquiries, so `GET /api/inquiries/{id}` is 404 for them.
-
-## Relevant Files
-
-For the next objective (bulk inquiry import):
-
-- `C:\jaftimv2\Jaftim\Jaftim\Controllers\InquiryController.cs` - `BulkInquirySave` and its view/JS.
-- `BulkInquiryImport_V2` and its table type (read the definition locally first).
-- `src/Jaftim.Jobs/` and `docs/CONVENTIONS.md` "Adding a background job" - the job recipe.
-- `src/Jaftim.Application/Modules/Inquiries/InquirySaveService.cs` - the single-row add rules to stay consistent with.
+1. **Release step for `v2/007`**: every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
+   **before** this build is deployed there (without it notifications are logged as unqueueable and lost), and the API
+   App Service needs `ConnectionStrings:Hangfire` (it now runs a Hangfire server). Live alone sets
+   `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`.
+2. 12 roles have zero `RoleActionMapping` rows (query in `docs/DATABASE.md`).
+3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
 
 ## Next Actions
 
-1. **Port bulk inquiry import** (`InquiryController.BulkInquirySave`) as a Hangfire job over
-   `BulkInquiryImport_V2` (TVP) with progress. Start by reading the legacy action, the procedure and its table
-   type, and how the legacy screen reports per-row errors.
+1. **Port bulk inquiry import** (`InquiryController.BulkInquirySave`) as a Hangfire job over `BulkInquiryImport_V2`
+   (TVP) with progress, written the pipeline way (`IJobRunner`; notify through `INotificationDispatcher`). Start by
+   reading the legacy action, the procedure and its table type, and how the legacy screen reports per-row errors.
 2. Decide captcha/rate-limiting, then port `POST /api/public/inquiries`.
-3. Optional: page/search `GET /api/tagging/available-customers` in memory if the UAT row count makes the full list
-   too heavy (check the count on UAT, read-only).
-4. Then Module 2 leftovers (user sections/stocks/image, entities/hierarchy/org-chart) or Module 4, owner's choice.
+3. Optional: an admin read/requeue endpoint over outbox dead letters (today: `SELECT ... WHERE Status = 2`).
+4. Then Module 2 leftovers or Module 4 (its `SendResetLink` is the first real `IEmailDispatcher` caller).
 
 ## Working Tree / Git Context
 
-Under git since 2026-09-24. Remote: `https://github.com/shahabuddin1515-maker/jaftim-erp-server` (**public**).
-Work on `dev` only; the owner merges to `staging`/`master` - see "Branching and pushing" in `CLAUDE.md`. Never
-commit a real credential (`docs/GETTING_STARTED.md`).
-
-The local databases are not version-controlled: check the script table in `docs/DATABASE.md` against them before
-trusting this handoff. The legacy reference repo `C:\jaftimv2\Jaftim` is not a git repository.
+Under git. Remote `https://github.com/shahabuddin1515-maker/jaftim-erp-server` (**public**). Work on `dev` only; the
+owner merges onwards - see "Branching and pushing" in `CLAUDE.md`. The local databases are not version-controlled:
+check the script table in `docs/DATABASE.md` against them before trusting this handoff.

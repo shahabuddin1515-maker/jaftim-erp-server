@@ -22,4 +22,8 @@ public static class JobQueues
     public const string StockStatus = "stock-status";
     public const string LegacySync = "legacy-sync";
     public const string Integrations = "integrations";
+    /// <summary>Notification pipeline. Consumed ONLY by the API host - realtime push needs its SignalR hub.</summary>
+    public const string Notifications = "notifications";
+    /// <summary>Email pipeline. Consumed by the Jobs host.</summary>
+    public const string Email = "email";
 }

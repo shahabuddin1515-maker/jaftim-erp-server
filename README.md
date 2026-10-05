@@ -35,4 +35,5 @@ docs/                      the documents above + docs/inventory (live DB object 
 tools/                     gen-permissions.ps1, set-local-password.ps1, HashPassword
 ```
 
-Build & test: `dotnet build && dotnet test` (both hosts build warning-free; 69 tests).
+Build & test: `dotnet build && dotnet test` (both hosts build warning-free; the current count is in
+`docs/CURRENT_STATE.md`).

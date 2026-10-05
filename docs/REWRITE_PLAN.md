@@ -16,6 +16,7 @@ redesigned schema and Razor Pages. **Those decisions are reversed** by the owner
 | Tenancy (2026-09-18) | single company, `CompanyId = 1` | **Database per tenant** + shared **catalog** (identity, tenant registry, sessions); users can belong to several tenants and switch |
 | Roles (2026-09-18) | one `UserProfile.RoleId` | **Multiple roles per user, optionally time-bound** (`UserRole`); `UserProfile.RoleId` stays the primary role the procedures see; permissions = union |
 | Audit (2026-09-18) | trigger history tables, `ActionURlTbl` | those kept + central `AuditLog` per tenant (who/what/before/after) + catalog `AuthAuditLog`; std audit columns on every v2 table |
+| Notifications, e-mail, jobs (2026-10-05) | notifications inline in the request; `EmailService` called inline; each worker hand-rolled | **Pipelines** (owner): notifications and e-mail are **separate durable outbox pipelines** (row -> lease -> ordered steps -> succeeded / retry with back-off / dead letter); every background job runs through the same step mechanism (`IJobRunner`: log scope, tenant binding). Why: delivery failures are retried and visible instead of swallowed, cross-cutting job behaviour lives in one place, and a request never waits on SMTP or SignalR. Consequence: the API hosts a lightweight Hangfire server for the `notifications` queue only - see `docs/ARCHITECTURE.md` "Messaging and job pipelines" |
 
 Everything in `README.md`, `NOTIFICATIONS.md`, `StockStatusBusinessLogicSummary.md` and `AGENTS.md` of the legacy
 repo remains the authoritative description of **what the business logic is**. This document is about **where it goes**.
@@ -158,10 +159,12 @@ Full detail in `docs/AUTH.md`. Summary:
 | StockJourneyStatusUpdates/OutboxPublisher + QueueWorker | outbox -> Azure Queue -> `StockStatus_RefreshOne` | `StockStatusOutboxDispatchJob` -> `StockStatusRefreshOneJob` (Hangfire queue `stock-status`, **no Azure queue hop**), same Claim/MarkPublished/MarkFailed contract | **done** |
 | StockSync/Worker + ImagesSyncWorker | Azure Queue -> PHP Old ERP | `LegacyErpStockSyncJob.SyncStock/SyncImages`, enqueued by the API via `IJobScheduler` | skeleton |
 | RespondIOSync x3 | hosted loops, `Enable*` switches | `RespondIoContactSyncJob` / `CustomerPushJob` / `ConversationSyncJob`, recurring, same switches | skeleton |
-| JaftimWebhooks (Azure Function `POST /api/leads`) | bearer key in `AuthorizationKeys` -> `InsertLead` | becomes `POST /api/public/leads` on the API with the same key check | to do (Inquiry phase) |
+| JaftimWebhooks (Azure Function `POST /api/leads`) | bearer key in `AuthorizationKeys` -> `InsertLead` | possible future `POST /api/public/leads` | **not scheduled** - owner instruction 2026-09-23: the Function keeps running as-is (`docs/MIGRATION_INVENTORY.md`) |
+| - (new) notifications / e-mail | inline in the request | `NotificationOutboxJobs` (queue `notifications`, **API host**) / `EmailOutboxJobs` (queue `email`), each `ProcessAsync` per message + per-tenant `SweepAsync` every minute | **done** (2026-10-05) |
 
 Hangfire gives what the legacy workers lacked: a dashboard, retries with back-off, failed-job visibility (StockSync
-silently dropped messages after 5 attempts), `DisableConcurrentExecution` instead of hand-rolled app locks.
+silently dropped messages after 5 attempts), `DisableConcurrentExecution` instead of hand-rolled app locks. Every job
+body runs through `IJobRunner` (the job pipeline); outbox-backed jobs leave retrying to the outbox, not Hangfire.
 
 Coexistence rule: **a queue has exactly one consumer**. While the legacy MVC app still produces to the Azure
 `stocks`/`images` queues, keep the legacy `StockSync` worker running; the v2 job only handles stocks created/updated

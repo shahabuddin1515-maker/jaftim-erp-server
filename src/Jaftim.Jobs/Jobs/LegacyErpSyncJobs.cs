@@ -1,4 +1,5 @@
 using Hangfire;
+using Jaftim.Application.Jobs;
 
 namespace Jaftim.Jobs.Jobs;
 
@@ -17,23 +18,23 @@ namespace Jaftim.Jobs.Jobs;
 /// While the legacy MVC app still produces to the Azure queues, run the legacy StockSync worker alongside; do not
 /// consume the same queue from both.
 /// </summary>
-public sealed class LegacyErpStockSyncJob(TenantScopeRunner tenants, ILogger<LegacyErpStockSyncJob> logger)
+public sealed class LegacyErpStockSyncJob(IJobRunner jobs, ILogger<LegacyErpStockSyncJob> logger)
 {
     [Queue("legacy-sync")]
     [AutomaticRetry(Attempts = 5, DelaysInSeconds = [60, 180, 600, 1800, 3600])]
-    public async Task SyncStockAsync(string tenantCode, long stockId, string operationType, CancellationToken ct)
-    {
-        await tenants.BindAsync(tenantCode, ct);
-        logger.LogWarning("LegacyErpStockSyncJob not implemented yet: {Operation} stock {StockId}", operationType, stockId);
-        throw new NotImplementedException("Port StockSync/Worker.cs (web_sync_get_stock_by_Id -> PHP ERP -> UpdateStockCode).");
-    }
+    public Task SyncStockAsync(string tenantCode, long stockId, string operationType, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext("legacy-erp-sync-stock", tenantCode), _ =>
+        {
+            logger.LogWarning("LegacyErpStockSyncJob not implemented yet: {Operation} stock {StockId}", operationType, stockId);
+            throw new NotImplementedException("Port StockSync/Worker.cs (web_sync_get_stock_by_Id -> PHP ERP -> UpdateStockCode).");
+        }, ct);
 
     [Queue("legacy-sync")]
     [AutomaticRetry(Attempts = 5, DelaysInSeconds = [60, 180, 600, 1800, 3600])]
-    public async Task SyncImagesAsync(string tenantCode, long stockId, CancellationToken ct)
-    {
-        await tenants.BindAsync(tenantCode, ct);
-        logger.LogWarning("LegacyErpStockSyncJob.SyncImages not implemented yet: stock {StockId}", stockId);
-        throw new NotImplementedException("Port StockSync/ImagesSyncWorker.cs (web_sync_get_stock_images -> PHP ERP).");
-    }
+    public Task SyncImagesAsync(string tenantCode, long stockId, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext("legacy-erp-sync-images", tenantCode), _ =>
+        {
+            logger.LogWarning("LegacyErpStockSyncJob.SyncImages not implemented yet: stock {StockId}", stockId);
+            throw new NotImplementedException("Port StockSync/ImagesSyncWorker.cs (web_sync_get_stock_images -> PHP ERP).");
+        }, ct);
 }

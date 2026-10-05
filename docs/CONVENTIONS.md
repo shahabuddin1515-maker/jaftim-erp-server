@@ -52,12 +52,39 @@ Follow the reference module (`Stock` read path) exactly. Copy its shape; do not 
 
 ## Adding a background job
 
-1. `src/Jaftim.Jobs/Jobs/<Name>Job.cs`, `sealed`, `RunAsync(... CancellationToken ct)`.
-2. Attributes: `[Queue("...")]` from `JobQueues`, `[DisableConcurrentExecution(seconds)]` for anything that must not
+1. `src/Jaftim.Jobs/Jobs/<Name>Job.cs`, `sealed`, `RunAsync(string tenantCode, ..., CancellationToken ct)`.
+2. The body goes through the job pipeline - it gets the log scope, timing and tenant binding for free:
+   ```csharp
+   public Task RunAsync(string tenantCode, CancellationToken ct) =>
+       jobs.RunAsync(new JobContext(Id, tenantCode), async c => { /* work, using c */ }, ct);
+   ```
+   (`IJobRunner jobs` in the constructor; `tenantCode: null` for a global job; `JobContext.TenantId` is set once bound.)
+3. Attributes: `[Queue("...")]` from `JobQueues`, `[DisableConcurrentExecution(seconds)]` for anything that must not
    overlap, `[AutomaticRetry(Attempts = n, DelaysInSeconds = [...])]` (0 for minute-ticks).
-3. Recurring: one `AddOrUpdate` line in `JobsRegistry`. Fire-and-forget: enqueue from a service with
+4. Recurring: one `AddOrUpdate` line in `JobsRegistry.RegisterForTenant` **and** its id in `PerTenantJobIds`.
+   Fire-and-forget: enqueue from a service with
    `IJobScheduler.Enqueue<TJob>(j => j.RunAsync(args, CancellationToken.None), JobQueues.X)`.
-4. Jobs use the same repositories as the API. The actor is `SystemUser`.
+5. Jobs use the same repositories as the API. The actor is `SystemUser`.
+
+## Raising a notification / sending an e-mail
+
+- Notification: `await notifications.NotifyAsync(new NotificationRequest(...), ct)` after the business write. Never
+  call `Notification_Create`, SignalR or the outbox directly. It never throws (legacy contract).
+- E-mail: `await email.EnqueueAsync(new EmailMessage(to, subject, html, category), ct)` (`IEmailDispatcher`). It
+  validates (a pseudo-address such as phone digits is a 400) and throws when nothing was queued. Never call
+  `IEmailSender` from a service - only `SendEmailStep` does.
+- Both are delivered in the background by the outbox pipelines (`docs/ARCHITECTURE.md` "Messaging and job
+  pipelines"). In tests, fake the dispatcher; the pipelines have their own tests (`PipelineTests.cs`).
+
+## Adding a pipeline step
+
+1. `sealed class XStep : IPipelineStep<NotificationDelivery | EmailDelivery | JobContext>`; do the work, then
+   `await next(ct)` - or return without calling it to stop the run (that counts as success).
+2. Register it in `Application/DependencyInjection.cs` **at the position it must run** - registration order is
+   execution order.
+3. Throw `PermanentDeliveryException` for a failure retrying cannot fix; anything else is retried with back-off.
+   A step after `PersistNotificationStep` must not fail the message for something that already reached the inbox.
+4. Test it through the processor (`OutboxProcessorTests` / `EmailPipelineTests` / `JobPipelineTests` show how).
 
 ## Naming
 

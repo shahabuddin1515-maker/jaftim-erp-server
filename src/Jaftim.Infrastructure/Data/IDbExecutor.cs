@@ -34,6 +34,8 @@ public interface IDbTransactionScope
     Task<IReadOnlyList<T>> QueryAsync<T>(SpCall call, CancellationToken ct = default);
     Task<T?> QueryFirstOrDefaultAsync<T>(SpCall call, CancellationToken ct = default);
     Task<int> ExecuteAsync(SpCall call, CancellationToken ct = default);
+    /// <summary>Several result sets inside the transaction; <paramref name="read"/> must consume them before returning.</summary>
+    Task<T> QueryMultipleAsync<T>(SpCall call, Func<SqlMapper.GridReader, Task<T>> read, CancellationToken ct = default);
 }
 
 /// <summary>Tenant-bound executor: opens the current tenant database and injects the legacy audit trio by default.</summary>
@@ -108,7 +110,15 @@ public abstract class DbExecutorBase(
         }
         catch
         {
-            await transaction.RollbackAsync(CancellationToken.None);
+            // A procedure's own CATCH (ROLLBACK TRAN; THROW - e.g. Notification_Create) has usually rolled back already;
+            // rolling back again would throw "transaction has completed" and hide the real error.
+            try
+            {
+                if (transaction.Connection is not null) await transaction.RollbackAsync(CancellationToken.None);
+            }
+            catch (InvalidOperationException)
+            {
+            }
             throw;
         }
     }
@@ -146,5 +156,11 @@ public abstract class DbExecutorBase(
 
         public Task<int> ExecuteAsync(SpCall call, CancellationToken ct = default) =>
             connection.ExecuteAsync(owner.Build(call, transaction, ct));
+
+        public async Task<T> QueryMultipleAsync<T>(SpCall call, Func<SqlMapper.GridReader, Task<T>> read, CancellationToken ct = default)
+        {
+            using SqlMapper.GridReader grid = await connection.QueryMultipleAsync(owner.Build(call, transaction, ct));
+            return await read(grid);
+        }
     }
 }

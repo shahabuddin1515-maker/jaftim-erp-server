@@ -1,4 +1,5 @@
 using Hangfire;
+using Jaftim.Application.Jobs;
 using Microsoft.Extensions.Options;
 
 namespace Jaftim.Jobs.Jobs;
@@ -30,47 +31,47 @@ public sealed class RespondIoOptions
 /// over: 600 s command timeout on tpi_respondio_contactsync_process, chunked processing, erp_sync_status is a
 /// case-sensitive list field, a 400 from contact lookup is FAILED not "absent", cutoff missing = start from now.
 /// </summary>
-public sealed class RespondIoContactSyncJob(TenantScopeRunner tenants, IOptions<RespondIoOptions> options, ILogger<RespondIoContactSyncJob> logger)
+public sealed class RespondIoContactSyncJob(IJobRunner jobs, IOptions<RespondIoOptions> options, ILogger<RespondIoContactSyncJob> logger)
 {
     public const string Id = "respondio-contact-sync";
 
     [Queue("integrations")]
     [DisableConcurrentExecution(timeoutInSeconds: 600)]
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(string tenantCode, CancellationToken ct)
-    {
-        if (!options.Value.EnableContactSync) { logger.LogDebug("Respond.io contact sync disabled"); return; }
-        await tenants.BindAsync(tenantCode, ct);
-        throw new NotImplementedException("Port RespondIOSync/RespondIOContactSyncWorker.cs (fetch/dump -> process -> status write-back).");
-    }
+    public Task RunAsync(string tenantCode, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode), _ =>
+        {
+            if (!options.Value.EnableContactSync) { logger.LogDebug("Respond.io contact sync disabled"); return Task.CompletedTask; }
+            throw new NotImplementedException("Port RespondIOSync/RespondIOContactSyncWorker.cs (fetch/dump -> process -> status write-back).");
+        }, ct);
 }
 
-public sealed class RespondIoCustomerPushJob(TenantScopeRunner tenants, IOptions<RespondIoOptions> options, ILogger<RespondIoCustomerPushJob> logger)
+public sealed class RespondIoCustomerPushJob(IJobRunner jobs, IOptions<RespondIoOptions> options, ILogger<RespondIoCustomerPushJob> logger)
 {
     public const string Id = "respondio-customer-push";
 
     [Queue("integrations")]
     [DisableConcurrentExecution(timeoutInSeconds: 600)]
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(string tenantCode, CancellationToken ct)
-    {
-        if (!options.Value.EnableCustomerPush) { logger.LogDebug("Respond.io customer push disabled"); return; }
-        await tenants.BindAsync(tenantCode, ct);
-        throw new NotImplementedException("Port RespondIOSync/RespondIOCustomerPushWorker.cs (collect -> lookup-before-create -> save).");
-    }
+    public Task RunAsync(string tenantCode, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode), _ =>
+        {
+            if (!options.Value.EnableCustomerPush) { logger.LogDebug("Respond.io customer push disabled"); return Task.CompletedTask; }
+            throw new NotImplementedException("Port RespondIOSync/RespondIOCustomerPushWorker.cs (collect -> lookup-before-create -> save).");
+        }, ct);
 }
 
-public sealed class RespondIoConversationSyncJob(TenantScopeRunner tenants, IOptions<RespondIoOptions> options, ILogger<RespondIoConversationSyncJob> logger)
+public sealed class RespondIoConversationSyncJob(IJobRunner jobs, IOptions<RespondIoOptions> options, ILogger<RespondIoConversationSyncJob> logger)
 {
     public const string Id = "respondio-conversation-sync";
 
     [Queue("integrations")]
     [DisableConcurrentExecution(timeoutInSeconds: 1800)]
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(string tenantCode, CancellationToken ct)
-    {
-        if (!options.Value.EnableConversationSync) { logger.LogDebug("Respond.io conversation sync disabled"); return; }
-        await tenants.BindAsync(tenantCode, ct);
-        throw new NotImplementedException("Port RespondIOSync/RespondIOConversationSyncWorker.cs (messages + attachments to Blob).");
-    }
+    public Task RunAsync(string tenantCode, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode), _ =>
+        {
+            if (!options.Value.EnableConversationSync) { logger.LogDebug("Respond.io conversation sync disabled"); return Task.CompletedTask; }
+            throw new NotImplementedException("Port RespondIOSync/RespondIOConversationSyncWorker.cs (messages + attachments to Blob).");
+        }, ct);
 }

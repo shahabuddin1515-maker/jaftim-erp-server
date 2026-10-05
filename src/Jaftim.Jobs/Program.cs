@@ -20,7 +20,7 @@ builder.Services.AddApplication();
 builder.Services.AddInfrastructure(builder.Configuration);
 builder.Services.AddSingleton<ICurrentUser, SystemUser>();
 builder.Services.AddOptions<RespondIoOptions>().Bind(builder.Configuration.GetSection(RespondIoOptions.SectionName));
-builder.Services.AddScoped<TenantScopeRunner>();
+// Job bodies run through IJobRunner (logging scope -> tenant binding), registered by AddApplication.
 builder.Services.AddScoped<TenantJobsRegistrarJob>();
 
 // ---------- Hangfire: SQL Server storage in its own database ----------

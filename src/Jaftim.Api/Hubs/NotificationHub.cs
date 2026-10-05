@@ -1,5 +1,6 @@
 using Jaftim.Application.Abstractions;
 using Jaftim.Application.Modules.Notifications;
+using Jaftim.Infrastructure.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.SignalR;
 
@@ -11,7 +12,7 @@ namespace Jaftim.Api.Hubs;
 /// access_token query string (SignalR JS client: accessTokenFactory) - see Program.cs JwtBearer OnMessageReceived.
 /// </summary>
 [Authorize]
-public sealed class NotificationHub(ICurrentUser currentUser, ITenantContext tenant) : Hub
+public sealed class NotificationHub : Hub
 {
     public const string Path = "/hubs/notifications";
     public const string ClientMethod = "ReceiveNotification";
@@ -19,15 +20,25 @@ public sealed class NotificationHub(ICurrentUser currentUser, ITenantContext ten
     // Profile ids repeat across tenant databases, so the group is keyed by tenant too.
     public static string GroupFor(int tenantId, long userProfileId) => $"t{tenantId}-user-{userProfileId}";
 
+    // The group comes from the connection's own token claims, NOT from the scoped ITenantContext: SignalR runs every
+    // hub method in a fresh DI scope where TokenVersionValidator never bound the tenant, so that context reads
+    // TenantId 0 here and the connection joined "t0-user-..." - a group no push ever targets (found 2026-10-05).
+    private string? OwnGroup() =>
+        int.TryParse(Context.User?.FindFirst(JaftimClaims.TenantId)?.Value, out int tenantId) && tenantId > 0
+        && long.TryParse(Context.User?.FindFirst(JaftimClaims.UserProfileId)?.Value, out long userProfileId) && userProfileId > 0
+            ? GroupFor(tenantId, userProfileId)
+            : null;
+
     public override async Task OnConnectedAsync()
     {
-        await Groups.AddToGroupAsync(Context.ConnectionId, GroupFor(tenant.TenantId, currentUser.UserProfileId));
+        if (OwnGroup() is { } group) await Groups.AddToGroupAsync(Context.ConnectionId, group);
+        else Context.Abort(); // a token without tenant/user claims can never receive anything
         await base.OnConnectedAsync();
     }
 
     public override async Task OnDisconnectedAsync(Exception? exception)
     {
-        await Groups.RemoveFromGroupAsync(Context.ConnectionId, GroupFor(tenant.TenantId, currentUser.UserProfileId));
+        if (OwnGroup() is { } group) await Groups.RemoveFromGroupAsync(Context.ConnectionId, group);
         await base.OnDisconnectedAsync(exception);
     }
 }

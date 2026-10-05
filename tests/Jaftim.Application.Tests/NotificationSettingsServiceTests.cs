@@ -188,7 +188,6 @@ public sealed class NotificationInboxServiceTests
         public bool LastOnlyUnread { get; private set; }
         public int LastSkip { get; private set; }
 
-        public Task<NotificationCreateResult> CreateAsync(NotificationRequest request, CancellationToken ct = default) => throw new NotSupportedException();
         public Task<NotificationSummary> GetSummaryAsync(long userProfileId, CancellationToken ct = default) { UserIds.Add(userProfileId); return Task.FromResult(new NotificationSummary(0, 0)); }
         public Task<PagedResult<NotificationListItem>> GetByUserAsync(long userProfileId, bool onlyUnread, PagedRequest paging, CancellationToken ct = default)
         {

@@ -7,33 +7,12 @@ using Jaftim.Infrastructure.Data;
 
 namespace Jaftim.Infrastructure.Repositories;
 
-/// <summary>Procedures from Database/Notifications/*.sql in the legacy repo (NOTIFICATIONS.md section 3.2).</summary>
+/// <summary>
+/// Procedures from Database/Notifications/*.sql in the legacy repo (NOTIFICATIONS.md section 3.2). Notification_Create
+/// lives in <see cref="NotificationOutboxRepository.PersistAsync"/> - only the pipeline calls it.
+/// </summary>
 public sealed class NotificationRepository(IDbExecutor db) : INotificationRepository
 {
-    public Task<NotificationCreateResult> CreateAsync(NotificationRequest request, CancellationToken ct = default)
-    {
-        SpCall call = SpCall.Procedure("Notification_Create")
-            .With("@TypeCode", request.TypeCode, DbType.AnsiString, 50)
-            .With("@Title", request.Title, DbType.String, 200)
-            .With("@Message", request.Message, DbType.String)
-            .With("@EntityType", request.EntityType, DbType.String, 100)
-            .With("@EntityId", request.EntityId)
-            .With("@Url", request.Url, DbType.String, 500)
-            .With("@Priority", request.Priority, DbType.Byte)
-            .With("@RecipientUserIdsCsv", Csv(request.RecipientUserIds), DbType.String)
-            .With("@RecipientRoleIdsCsv", Csv(request.RecipientRoleIds), DbType.String)
-            .With("@ExcludeUserIdsCsv", Csv(request.ExcludeUserIds), DbType.String)
-            .With("@UseRoleMap", request.UseRoleMap)
-            .With("@ExcludeCreator", request.ExcludeCreator);
-
-        return db.QueryMultipleAsync(call, async grid =>
-        {
-            NotificationPayload payload = await grid.ReadSingleAsync<NotificationPayload>();
-            IReadOnlyList<long> recipients = (await grid.ReadAsync<long>()).AsList();
-            return new NotificationCreateResult(payload, recipients);
-        }, ct);
-    }
-
     public Task<NotificationSummary> GetSummaryAsync(long userProfileId, CancellationToken ct = default) =>
         db.QuerySingleAsync<NotificationSummary>(
             SpCall.Procedure("Notification_GetSummary").With("@UserId", userProfileId), ct);
@@ -63,7 +42,4 @@ public sealed class NotificationRepository(IDbExecutor db) : INotificationReposi
             SpCall.Procedure("Notification_MarkRead")
                 .With("@NotificationRecipientId", notificationRecipientId)
                 .With("@UserId", userProfileId), ct);
-
-    private static string? Csv(IReadOnlyCollection<long>? ids) =>
-        ids is { Count: > 0 } ? string.Join(",", ids) : null;
 }

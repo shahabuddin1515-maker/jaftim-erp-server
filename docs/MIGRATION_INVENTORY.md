@@ -18,7 +18,8 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 | `_SidebarPartial.cshtml` (hand-written menu + `R_CSS` hiding, RoleId branches) | `GET /api/navigation/me` (data-driven tree filtered by effective permissions/roles), `GET/PUT/DELETE /api/navigation` (admin), `GET /api/permissions/catalog` (RoleAction tree) - `docs/NAVIGATION.md` | any / 304 | done |
 | `BaseController` IP allowlist | `IpAllowlistMiddleware` | - | done |
 | `BaseController.SaveActionURL` | `RequestAuditMiddleware` | - | done |
-| `NotificationHub` | `/hubs/notifications` | - | done |
+| `NotificationHub` | `/hubs/notifications` | - | done (realtime push first verified with a real client 2026-10-05, after fixing the payload mapping and the hub group - `docs/NOTIFICATIONS.md`) |
+| legacy inline `NotificationDispatcher` | `INotificationDispatcher` -> notification outbox pipeline (`database/v2/007`; persist as the original actor, push; retry, dead letter, no duplicates) | - | done |
 | `NotificationController` Summary/MarkRead/MarkAllRead/MarkAllSeen | `GET /api/notifications/summary`, `POST .../mark-all-seen`, `.../mark-all-read`, `.../{id}/mark-read` | auth | done |
 | `NotificationController` List/Index | `GET /api/notifications?onlyUnread=&page=&pageSize=` (`Notification_GetByUser`; count + page, `PagedResult`) | auth | done |
 | `HomeController`, `ExceptionController` | n/a | - | drop (views) |
@@ -153,7 +154,8 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 | - (new) | `AccountSyncJob` (tenant `AspNetUsers`+`UserProfile` -> catalog `Account`/`AccountTenant`, per tenant, every minute), `TenantJobsRegistrarJob` (per-tenant schedule reconciliation, every 5 min) | done |
 | StockSync `Worker`, `ImagesSyncWorker` | `LegacyErpStockSyncJob.SyncStockAsync/SyncImagesAsync` | skeleton |
 | RespondIOSync x3 | `RespondIoContactSyncJob`, `RespondIoCustomerPushJob`, `RespondIoConversationSyncJob` | skeleton |
-| `EmailService` (forgot password) | `IEmailSender` + a `SendEmailJob` | sender done, job todo |
+| `EmailService` (forgot password) | `IEmailDispatcher` -> e-mail outbox pipeline (`EmailOutboxJobs`, queue `email`; guard Suppress/Redirect/Send -> `IEmailSender`) | done (pipeline; exercised locally in Suppress mode - **no real SMTP send tested yet**). Its first caller, `SendResetLink`, is still todo (Module 4) |
+| every job's tenant binding / logging | job pipeline `IJobRunner` (`JobLoggingStep`, `JobTenantBindingStep`); replaces `TenantScopeRunner` | done |
 | Legacy `AzureQueueService` producer in `StockController` | replaced by `IJobScheduler.Enqueue<LegacyErpStockSyncJob>` | done (abstraction) |
 
 ## Module 9 - Public website procedures (`web_*`, `WEB_*`, `SYS_Public_*`)

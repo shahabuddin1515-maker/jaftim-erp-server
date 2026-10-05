@@ -8,9 +8,27 @@ reference for how an audience is composed; this page is only the v2 surface.
 ## Raising an event
 
 Business code calls `INotificationDispatcher.NotifyAsync(new NotificationRequest(...))` and nothing else - never
-SignalR, never SQL. The dispatcher persists through `Notification_Create` (which resolves the audience and returns
-the recipient ids) and then pushes to those users. It is **best-effort**: a notification failure is logged and never
-breaks the business action that raised it.
+SignalR, never SQL. Since 2026-10-05 that **queues** the event on the notification pipeline (`NotificationOutbox`,
+`database/v2/007`); the API host then runs `Notification_Create` - which resolves the audience and returns the
+recipient ids - as the user who raised the event, and pushes to those users. Mechanics, retries and guarantees:
+`docs/ARCHITECTURE.md` "Messaging and job pipelines". Raising stays **best-effort**: if the event cannot even be
+queued, that is logged and never breaks the business action that raised it.
+
+What changed for callers: nothing in the signature. What changed in behaviour:
+
+- Delivery is asynchronous (about a second after the request locally) and **retried** with back-off; a type that is
+  unknown or inactive is dead-lettered on the first attempt (`NotificationOutbox.Status = 2`, `LastError`).
+- A notification is never created twice, even when a retry follows a failure after `Notification_Create` committed.
+- Routing still sees the real actor: `@CreatedBy` is captured on the outbox row and replayed, so `ReportingChainUp`
+  and `ExcludeCreator` behave exactly as when the call was inline.
+- While no API instance is running, notifications wait in the outbox and go out when one starts.
+
+**Two defects of the first v2 port, fixed 2026-10-05** (both silent, because the inline dispatcher swallowed
+errors and earlier runs only checked the database rows): the payload record had 9 fields while `Notification_Create`
+returns 12, so materialising it threw *after* the procedure had committed - rows were written but **no push ever
+fired**; and the hub joined each connection to `t0-user-…` (the scoped tenant context is unbound in SignalR's per-call
+scope), a group no push targets. Verified fixed with a real SignalR client: the push arrives about 0.7 s after the
+action, carrying all 12 columns (`category`, `iconClass`, `createdByName` included).
 
 ```csharp
 await notifications.NotifyAsync(new NotificationRequest(
@@ -23,8 +41,9 @@ await notifications.NotifyAsync(new NotificationRequest(
 ## Realtime
 
 `/hubs/notifications` (SignalR, JWT via `?access_token=`). Each connection joins the group
-`t{TenantId}-user-{UserProfileId}` - keyed by tenant because profile ids repeat across tenant databases - and
-receives `ReceiveNotification` with the payload. Scale-out needs a backplane (Azure SignalR Service or Redis); the
+`t{TenantId}-user-{UserProfileId}` - keyed by tenant because profile ids repeat across tenant databases, and read
+from the connection's `tid`/`uid` claims - and receives `ReceiveNotification` with the payload: `notificationId,
+typeCode, category, title, message, entityType, entityId, url, priority, iconClass, createdAt, createdByName`. Scale-out needs a backplane (Azure SignalR Service or Redis); the
 group model works unchanged.
 
 ## Inbox endpoints (the bell)

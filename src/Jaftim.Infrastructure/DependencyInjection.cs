@@ -1,6 +1,8 @@
 using Jaftim.Application.Abstractions;
+using Jaftim.Application.Messaging;
 using Jaftim.Application.Modules.Audit;
 using Jaftim.Application.Modules.Auth;
+using Jaftim.Application.Modules.Email;
 using Jaftim.Application.Modules.Inquiries;
 using Jaftim.Application.Modules.Lookups;
 using Jaftim.Application.Modules.Navigation;
@@ -10,6 +12,7 @@ using Jaftim.Application.Modules.Tagging;
 using Jaftim.Application.Modules.Tenancy;
 using Jaftim.Application.Modules.Users;
 using Jaftim.Infrastructure.Data;
+using Jaftim.Infrastructure.Messaging;
 using Jaftim.Infrastructure.Repositories;
 using Jaftim.Infrastructure.Repositories.Catalog;
 using Jaftim.Infrastructure.Security;
@@ -39,6 +42,7 @@ public static class DependencyInjection
         services.AddOptions<AuthOptions>().Bind(configuration.GetSection(AuthOptions.SectionName));
         services.AddOptions<BlobStorageOptions>().Bind(configuration.GetSection(BlobStorageOptions.SectionName));
         services.AddOptions<EmailOptions>().Bind(configuration.GetSection(EmailOptions.SectionName));
+        services.AddOptions<EmailDeliveryOptions>().Bind(configuration.GetSection(EmailDeliveryOptions.SectionName));
         services.AddOptions<SystemUserOptions>().Bind(configuration.GetSection(SystemUserOptions.SectionName));
 
         // Tenancy + data access. Catalog is a fixed connection; tenant connections come from the catalog.
@@ -69,6 +73,8 @@ public static class DependencyInjection
         services.AddScoped<ILookupRepository, LookupRepository>();
         services.AddScoped<INotificationRepository, NotificationRepository>();
         services.AddScoped<INotificationSettingsRepository, NotificationSettingsRepository>();
+        services.AddScoped<INotificationOutboxRepository, NotificationOutboxRepository>();
+        services.AddScoped<IEmailOutboxRepository, EmailOutboxRepository>();
         services.AddScoped<IAuditLogRepository, AuditLogRepository>();
         services.AddScoped<INavigationRepository, NavigationRepository>();
 
@@ -88,6 +94,10 @@ public static class DependencyInjection
         services.AddSingleton<IEmailSender, SmtpEmailSender>();
         services.AddScoped<IJobScheduler, HangfireJobScheduler>();
         services.TryAddScoped<INotificationPusher, NoOpNotificationPusher>(); // the API replaces this with the SignalR pusher (last registration wins)
+
+        // Messaging pipelines: outbox signal (immediate Hangfire dispatch) and the retry/dead-letter classifier.
+        services.AddScoped<IOutboxSignal, HangfireOutboxSignal>();
+        services.AddSingleton<IDeliveryFailureClassifier, DeliveryFailureClassifier>();
 
         return services;
     }

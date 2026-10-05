@@ -1,4 +1,5 @@
 using Hangfire;
+using Jaftim.Application.Jobs;
 using Jaftim.Infrastructure.Data;
 
 namespace Jaftim.Jobs.Jobs;
@@ -17,7 +18,7 @@ namespace Jaftim.Jobs.Jobs;
 ///
 /// The v2 API already recomputes synchronously on its own writes, so this is the safety net for everyone else.
 /// </summary>
-public sealed class PartyKindSyncJob(TenantScopeRunner tenants, IDbExecutor db, ILogger<PartyKindSyncJob> logger)
+public sealed class PartyKindSyncJob(IJobRunner jobs, IDbExecutor db, ILogger<PartyKindSyncJob> logger)
 {
     public const string Id = "party-kind-sync";
     public const string Cron = "*/5 * * * *";
@@ -25,16 +26,15 @@ public sealed class PartyKindSyncJob(TenantScopeRunner tenants, IDbExecutor db, 
     [Queue("default")]
     [DisableConcurrentExecution(timeoutInSeconds: 280)]
     [AutomaticRetry(Attempts = 0)]   // a missed run is picked up by the next tick
-    public async Task RunAsync(string tenantCode, CancellationToken ct)
-    {
-        await tenants.BindAsync(tenantCode, ct);
+    public Task RunAsync(string tenantCode, CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode), async c =>
+        {
+            int kinds = await db.QuerySingleAsync<int>(
+                SpCall.Procedure("Party_ReconcileKinds").WithoutAudit().WithTimeout(120), c);
+            int links = await db.QuerySingleAsync<int>(
+                SpCall.Procedure("Inquiry_ReconcileUserProfileId").WithoutAudit().WithTimeout(120), c);
 
-        int kinds = await db.QuerySingleAsync<int>(
-            SpCall.Procedure("Party_ReconcileKinds").WithoutAudit().WithTimeout(120), ct);
-        int links = await db.QuerySingleAsync<int>(
-            SpCall.Procedure("Inquiry_ReconcileUserProfileId").WithoutAudit().WithTimeout(120), ct);
-
-        if (kinds > 0 || links > 0)
-            logger.LogInformation("Party sync for {Tenant}: {Kinds} classification(s), {Links} inquiry link(s) updated", tenantCode, kinds, links);
-    }
+            if (kinds > 0 || links > 0)
+                logger.LogInformation("Party sync for {Tenant}: {Kinds} classification(s), {Links} inquiry link(s) updated", tenantCode, kinds, links);
+        }, ct);
 }

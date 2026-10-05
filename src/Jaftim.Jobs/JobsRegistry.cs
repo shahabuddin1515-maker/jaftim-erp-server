@@ -1,8 +1,10 @@
 using Hangfire;
 using Hangfire.Storage;
 using Jaftim.Application.Abstractions;
+using Jaftim.Application.Jobs;
 using Jaftim.Application.Modules.Tenancy;
 using Jaftim.Domain.Entities.Tenancy;
+using Jaftim.Infrastructure.Messaging;
 using Jaftim.Jobs.Jobs;
 using Microsoft.Extensions.Options;
 
@@ -16,10 +18,15 @@ namespace Jaftim.Jobs;
 /// </summary>
 public static class JobsRegistry
 {
+    /// <summary>
+    /// Queues this host consumes. NOT <see cref="JobQueues.Notifications"/>: notification delivery needs the SignalR
+    /// hub, so only the API host consumes that queue (a queue has exactly one kind of consumer).
+    /// </summary>
     public static readonly string[] Queues =
     [
         JobQueues.Critical,
         JobQueues.Default,
+        JobQueues.Email,
         JobQueues.StockStatus,
         JobQueues.LegacySync,
         JobQueues.Integrations,
@@ -29,6 +36,7 @@ public static class JobsRegistry
     [
         StockJourneyStatusJob.Id, StockStatusOutboxEnqueueJob.Id, StockStatusOutboxDispatchJob.Id,
         AccountSyncJob.Id, PartyKindSyncJob.Id, RespondIoContactSyncJob.Id, RespondIoCustomerPushJob.Id, RespondIoConversationSyncJob.Id,
+        NotificationOutboxJobs.SweepId, EmailOutboxJobs.SweepId,
     ];
 
     public static string IdFor(string jobId, string tenantCode) => $"{jobId}:{tenantCode}";
@@ -55,6 +63,10 @@ public static class JobsRegistry
         // --- Normalized columns vs. the paths this backend does not own (lead pipeline, Respond.io, legacy app) ---
         manager.AddOrUpdate<PartyKindSyncJob>(IdFor(PartyKindSyncJob.Id, code), j => j.RunAsync(code, CancellationToken.None), PartyKindSyncJob.Cron, options);
 
+        // --- Messaging pipelines: safety-net sweeps (retries due, missed immediate dispatches, purge) ---
+        manager.AddOrUpdate<NotificationOutboxJobs>(IdFor(NotificationOutboxJobs.SweepId, code), j => j.SweepAsync(code, CancellationToken.None), NotificationOutboxJobs.SweepCron, options);
+        manager.AddOrUpdate<EmailOutboxJobs>(IdFor(EmailOutboxJobs.SweepId, code), j => j.SweepAsync(code, CancellationToken.None), EmailOutboxJobs.SweepCron, options);
+
         // --- Respond.io (RespondIOSync project). Intervals mirror the legacy appsettings. ---
         manager.AddOrUpdate<RespondIoContactSyncJob>(IdFor(RespondIoContactSyncJob.Id, code), j => j.RunAsync(code, CancellationToken.None), HoursToCron(respondIo.IntervalInHours), options);
         manager.AddOrUpdate<RespondIoCustomerPushJob>(IdFor(RespondIoCustomerPushJob.Id, code), j => j.RunAsync(code, CancellationToken.None), HoursToCron(respondIo.IntervalInHours), options);
@@ -75,6 +87,7 @@ public static class JobsRegistry
 
 /// <summary>Reconciles the recurring schedules with the catalog Tenant table.</summary>
 public sealed class TenantJobsRegistrarJob(
+    IJobRunner jobs,
     IRecurringJobManager manager,
     JobStorage storage,
     ITenantRepository tenants,
@@ -85,7 +98,10 @@ public sealed class TenantJobsRegistrarJob(
 
     [DisableConcurrentExecution(timeoutInSeconds: 120)]
     [AutomaticRetry(Attempts = 0)]
-    public async Task RunAsync(CancellationToken ct)
+    public Task RunAsync(CancellationToken ct) =>
+        jobs.RunAsync(new JobContext(Id, tenantCode: null), ReconcileAsync, ct);
+
+    private async Task ReconcileAsync(CancellationToken ct)
     {
         IReadOnlyList<Tenant> all = await tenants.GetAllAsync(ct);
         var active = all.Where(t => t.IsActive).ToDictionary(t => t.Code, StringComparer.OrdinalIgnoreCase);

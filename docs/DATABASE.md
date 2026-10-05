@@ -53,7 +53,7 @@ Procedures that are stale siblings (confirm the live caller before use): `StockG
    here - they are never folded into an unrelated script.
 2. **Every v2 script** goes in `database/v2/NNN_Name.sql`: numbered, idempotent (`IF OBJECT_ID ... IS NULL`,
    `CREATE OR ALTER`), `SET QUOTED_IDENTIFIER ON` in its own batch at the top. Apply every tenant script to
-   **every** local tenant database. Next free number: **007**. (`002` is used twice - `002_AuditLog.sql` and
+   **every** local tenant database. Next free number: **008**. (`002` is used twice - `002_AuditLog.sql` and
    `002_Hangfire_Database.sql`, which targets the separate jobs database; don't repeat that, take the next number.)
 3. **Audit trio contract.** Procedures the API calls with default injection must declare
    `@CreatedBy BIGINT, @CreatedAt DATETIME, @CompanyId BIGINT = NULL`. `@CreatedBy` is `UserProfile.UserProfileId`.
@@ -77,7 +77,11 @@ Procedures that are stale siblings (confirm the live caller before use): `StockG
 | `v2/003_Navigation.sql` | `NavigationItem` (seeded from the legacy sidebar, regrouped by module), `Navigation_GetAll/Save/Delete` | applied to both local tenants |
 | `v2/005_PartyKind_And_Inquiry.sql` | `UserProfile.PartyKind/PartyKindIsManual/PartyQualifiedAtUtc/PartyKindModifiedAtUtc`, `fn_PartyKind`, `Party_RecomputeKind/SetKindManual/ReconcileKinds`, `Inquiry.UserProfileId` + FK + `Inquiry_ReconcileUserProfileId`, 4 missing indexes | applied to both local tenants; 0 mismatches vs the legacy CASE |
 | `v2/006_CustomerSave_InquiryGuard.sql` | patches `CustomerSave`'s duplicate-phone guard to exclude the inquiry being converted (its own comment already promised this). **Required for `POST /api/inquiries`** - without it every new enquirer is rejected. Self-adapting and re-runnable; see `docs/INQUIRIES.md` defect 0 | applied to both local tenants |
+| `v2/007_Messaging_Outbox.sql` | `NotificationOutbox`, `EmailOutbox` (the notification and e-mail pipelines' queues) + per table `_Enqueue` (audit trio), `_ClaimById`, `_ClaimDue`, `_MarkSucceeded`, `_MarkFailed`, `_Purge`, and `NotificationOutbox_MarkPersisted`. Lifecycle in the file header and `docs/ARCHITECTURE.md` "Messaging and job pipelines". **Required by both hosts** - every notification goes through it | applied to both local tenants (2026-10-05), exercised end-to-end locally |
 | `v2/002_Hangfire_Database.sql` | notes for creating the jobs database | local `jaftim-local-jobs` created |
+
+Outbox tables hard-delete their succeeded rows after 14 days (`_Purge`, called by the sweep) - they are queues, not
+business data; dead letters stay until someone looks at them.
 
 Pre-existing tables the API reuses with no change: `AspNetUsers` (kept because three ingestion procedures insert into it; mirrored to the catalog),
 `LoginAttempts`, `ActionURlTbl`, `Base_WhitelistedIPs`, `RoleAction`, `RoleActionMapping`, `SYS_DropDownsWithAuth`,
