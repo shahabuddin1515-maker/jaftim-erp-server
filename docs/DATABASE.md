@@ -111,6 +111,27 @@ Do these with a data-quality audit per table, and only once the legacy app no lo
   `CK_Entity_DivisionParent`, `Entity.ModifiedBy` -> `bigint`, `int` -> `bigint` + FKs on `UserEntities` /
   `UserCountries`. Owner decision 2026-10-05: not now - v2 validates instead.
 
+**Scalability findings (measured 2026-10-21 on the local UAT copy: 136 MB, 221 stock rows).** Nothing is slow at
+this size; these grow with the stock count and hit Live's 20 DTU first. No load test was run.
+
+- **Unindexed join keys.** 41 of the 50 tables carrying a stock id have no index leading on it (`Stock_Status`,
+  `Stock_StatusDetail`, `Stock_Financial`, `Stock_Shipment_Detail`, all `*_History`, ...); 276 of the 341 relationships
+  in `docs/ERD.md` have no index on the child column. The list procedures join 19-61 tables
+  (`StockGetAll_New` 61, `Stock_GetSectionById` 47, `SalesModule_GetAllStock_Optimized` 38), so each join scans the
+  whole child table. Plain (non-filtered) nonclustered indexes are additive and safe with the QUOTED_IDENTIFIER OFF
+  modules - highest value, lowest risk fix.
+- **`StockJourney` bloat.** 516k rows for 221 stocks (stock 133 alone: 105k) written April - 2026-07-10 by a job that
+  logged every run; `UpdateStockJourneyStatus` now inserts only on change (26 rows since). The rows remain, and that
+  guard's `TOP 1 ... WHERE StockId = ... ORDER BY ModifiedAt DESC` has no `(StockId, ModifiedAt)` index, so it scans the
+  table per changed stock per run. Needs the index, and a de-duplication (a data delete - owner decision).
+- **Plan quality.** 55 procedures use catch-all `@p IS NULL OR col = @p` filters (`RPT_GetSalesMasterReport` 43,
+  `StockGetAll_New` 30) and only 3 use `OPTION (RECOMPILE)` - parameter-sniffing risk; 21 use leading-wildcard
+  `LIKE '%' + @x` search, which no index can serve.
+- **Write amplification.** 21 triggers on 16 stock tables (history copies + status-refresh outbox) fire on every
+  write; history tables have no retention. Same for `LoginAttempts`, `AuditLog`, respond.io raw JSON.
+- **Types.** 209 `nvarchar(max)` columns (inflate memory grants, cannot be index keys), 381 `datetime` vs 60
+  `datetime2`, `IsDeleted` in four types, 39 procedures still call `GETDATE()`.
+
 ## Useful queries
 
 ```sql
