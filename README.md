@@ -18,7 +18,7 @@ project built by another team against this API.
 - **Inquiries, parties, Customer vs Contact**: [docs/INQUIRIES.md](docs/INQUIRIES.md) - what "contact" means, the stored PartyKind, snapshot-vs-current-truth, and the untouched lead-ingestion boundary.
 - **Users & regions**: [docs/USERS.md](docs/USERS.md) - divisions/groups/countries, why only countries decide data access, the region endpoints and the defects found.
 - **Notifications**: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) - raising events, the SignalR hub, the inbox endpoints and the routing admin (who receives what, as data).
-- **Database**: [docs/DATABASE.md](docs/DATABASE.md) - database-first, additive-only rules and the live inventory.
+- **Database**: [docs/DATABASE.md](docs/DATABASE.md) - database-first, additive-only rules and the live inventory; [docs/ERD.md](docs/ERD.md) - generated entity-relationship diagrams of the tenant schema.
 - **Work list**: [docs/MIGRATION_INVENTORY.md](docs/MIGRATION_INVENTORY.md) - every legacy action -> v2 endpoint.
 - **Run it**: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 
@@ -33,7 +33,7 @@ database/catalog/          shared catalog database (tenants, accounts, sessions,
 database/v2/               additive SQL for EVERY tenant database - apply all of it to every tenant
                            (see the script table in docs/DATABASE.md)
 docs/                      the documents above + docs/inventory (live DB object lists)
-tools/                     gen-permissions.ps1, set-local-password.ps1, HashPassword
+tools/                     gen-permissions.ps1, set-local-password.ps1, HashPassword, erd/generate_erd.py
 ```
 
 Build & test: `dotnet build && dotnet test` (both hosts build warning-free; the current count is in

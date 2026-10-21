@@ -24,6 +24,12 @@ strings live in user-secrets / App Service settings, never in this repo.
 246 tables, 405 procedures, 12 views, 19 functions, 21 triggers, 88 foreign keys, 9 table types. Full object lists
 are in `docs/inventory/` (`tables.txt`, `procedures.txt`).
 
+**Relationships:** `docs/ERD.md` holds Mermaid ER diagrams per domain, generated from a local tenant by
+`python -I tools/erd/generate_erd.py` (read-only). Most legacy relationships are **not** declared as foreign keys,
+so the generator also infers them from procedure/view JOIN conditions and, failing that, from column names; ERD.md
+lists the columns the procedures join to more than one table (e.g. `Stock.Stock_SupplierId` -> `UserProfile` and
+`Supplier`, the polymorphic `Stock_StatusDetail.Stock_SD_StockStatus_Value`). Re-run it after any schema change.
+
 **57 modules are compiled with `QUOTED_IDENTIFIER OFF`** (54 of them procedures) - measured 2026-09-24 on UAT and
 on the local copy, which agree. The legacy `README.md` section 6.5 says 55 and earlier drafts of these docs said
 58; the count drifts as objects are recreated, so re-measure rather than trusting any number here:
