@@ -18,7 +18,7 @@ project built by another team against this API.
 - **Inquiries, parties, Customer vs Contact**: [docs/INQUIRIES.md](docs/INQUIRIES.md) - what "contact" means, the stored PartyKind, snapshot-vs-current-truth, and the untouched lead-ingestion boundary.
 - **Users & regions**: [docs/USERS.md](docs/USERS.md) - divisions/groups/countries, why only countries decide data access, the region endpoints and the defects found.
 - **Notifications**: [docs/NOTIFICATIONS.md](docs/NOTIFICATIONS.md) - raising events, the SignalR hub, the inbox endpoints and the routing admin (who receives what, as data).
-- **Database**: [docs/DATABASE.md](docs/DATABASE.md) - database-first, additive-only rules and the live inventory; [docs/ERD.md](docs/ERD.md) - generated entity-relationship diagrams of the tenant schema.
+- **Database**: [docs/DATABASE.md](docs/DATABASE.md) - database-first, additive-only rules and the live inventory; [docs/ERD.md](docs/ERD.md) - generated entity-relationship diagrams of the tenant schema (`docs/ERD.dbml` opens in dbdiagram.io).
 - **Work list**: [docs/MIGRATION_INVENTORY.md](docs/MIGRATION_INVENTORY.md) - every legacy action -> v2 endpoint.
 - **Run it**: [docs/GETTING_STARTED.md](docs/GETTING_STARTED.md).
 

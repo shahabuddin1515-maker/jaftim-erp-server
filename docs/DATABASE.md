@@ -25,7 +25,8 @@ strings live in user-secrets / App Service settings, never in this repo.
 are in `docs/inventory/` (`tables.txt`, `procedures.txt`).
 
 **Relationships:** `docs/ERD.md` holds Mermaid ER diagrams per domain, generated from a local tenant by
-`python -I tools/erd/generate_erd.py` (read-only). Most legacy relationships are **not** declared as foreign keys,
+`python -I tools/erd/generate_erd.py` (read-only), which also writes `docs/ERD.dbml` - paste it into
+dbdiagram.io for an interactive diagram. Most legacy relationships are **not** declared as foreign keys,
 so the generator also infers them from procedure/view JOIN conditions and, failing that, from column names; ERD.md
 lists the columns the procedures join to more than one table (e.g. `Stock.Stock_SupplierId` -> `UserProfile` and
 `Supplier`, the polymorphic `Stock_StatusDetail.Stock_SD_StockStatus_Value`). Re-run it after any schema change.
