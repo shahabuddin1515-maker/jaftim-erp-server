@@ -38,7 +38,7 @@ Everything is data in the tenant database; nothing about modules or menus is har
 | PUT | `/api/navigation` | 304 | upsert one item; gate with `actionId` **or** mint a permission inline with `newPermissionName` (created under the parent node's permission) |
 | DELETE | `/api/navigation/{id}` | 304 | soft-delete the item and its subtree |
 | GET | `/api/permissions/catalog` | 304 | `RoleAction` tree: module -> screen -> action |
-| GET | `/api/permissions/keys` | **anonymous** | `{ STOCK_READ: 417, STOCK_DELETE: null, ... }` - the frontend's stable permission names -> ActionId (`null` = no `RoleAction` yet; several keys may share an id). Static, from `src/Jaftim.Domain/Security/PermissionKeys.cs`; the frontend checks the id against `permissions` from `/api/auth/me` |
+| GET | `/api/permissions/keys?tenantCode=` | **anonymous**, 60/min/IP | `{ AUTH: 1, ..., STOCK_LISTING: 417, ... }` - every `RoleAction` read live from the tenant database, ActionId order. Key = `ActionName` in UPPER_SNAKE (same word split as `tools/gen-permissions.ps1`); a later duplicate name gets `_<id>` (`CUSTOMER_TAGGING` = 526, `CUSTOMER_TAGGING_550` = 550 - note the C# constant `Permissions.CustomerTagging` is 550). No caller tenant exists, so `tenantCode` picks one; omitted = lowest-id active tenant; unknown/inactive = 404. **Renaming a `RoleAction` renames its key** - the frontend checks ids against `permissions` from `/api/auth/me` |
 | PUT | `/api/permissions` | 304 | create (`actionId` null; `parentActionId` null = new module) or rename / re-parent a permission |
 | GET | `/api/roles` | 301 | roles |
 | PUT | `/api/roles` | 302 | create / rename a role |

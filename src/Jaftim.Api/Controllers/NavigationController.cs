@@ -8,6 +8,7 @@ using Jaftim.Domain.Entities.Navigation;
 using Jaftim.Domain.Security;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace Jaftim.Api.Controllers;
 
@@ -48,7 +49,7 @@ public sealed class NavigationController(INavigationService navigation, IValidat
 }
 
 /// <summary>The permission catalog (RoleAction hierarchy). The same module grouping drives the navbar, the role-rights editor and per-button hiding.</summary>
-public sealed class PermissionsController(IPermissionCatalogService catalog, IValidator<PermissionUpsert> validator) : ApiControllerBase
+public sealed class PermissionsController(IPermissionCatalogService catalog, IPermissionKeyService keys, IValidator<PermissionUpsert> validator) : ApiControllerBase
 {
     /// <summary>Create a permission (a new module when parentActionId is null, otherwise a screen/action under the parent) or rename / re-parent one. Ids 900+ are allocated by the database.</summary>
     [HttpPut]
@@ -65,9 +66,10 @@ public sealed class PermissionsController(IPermissionCatalogService catalog, IVa
     public async Task<ActionResult<ApiResponse<IReadOnlyList<PermissionNode>>>> Catalog(CancellationToken ct) =>
         Ok(await catalog.GetCatalogAsync(ct));
 
-    /// <summary>Every frontend permission key with its ActionId (null = no RoleAction yet). Anonymous: static, no tenant or user data.</summary>
+    /// <summary>Every permission (RoleAction) of a tenant as { STOCK_LISTING: 417, ... }, read live from its database. Anonymous; tenantCode defaults to the lowest-id active tenant.</summary>
     [HttpGet("keys")]
     [AllowAnonymous]
-    public ActionResult<ApiResponse<IReadOnlyDictionary<string, int?>>> Keys() =>
-        Ok(PermissionKeys.All);
+    [EnableRateLimiting("public")]
+    public async Task<ActionResult<ApiResponse<IReadOnlyDictionary<string, int>>>> Keys([FromQuery] string? tenantCode, CancellationToken ct) =>
+        Ok(await keys.GetKeysAsync(tenantCode, ct));
 }

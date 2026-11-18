@@ -34,6 +34,7 @@ public static class DependencyInjection
         services.AddScoped<IRegionAdminService, RegionAdminService>();
         services.AddScoped<IRoleService, RoleService>();
         services.AddScoped<IPermissionCatalogService, PermissionCatalogService>();
+        services.AddScoped<IPermissionKeyService, PermissionKeyService>();
         services.AddScoped<INavigationService, NavigationService>();
         services.AddScoped<IAuditQueryService, AuditQueryService>();
         services.AddScoped<IStockService, StockService>();

@@ -20,8 +20,9 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
-- **Permission keys** (2026-11-18, new in v2): anonymous `GET /api/permissions/keys` - frontend key -> ActionId map
-  (`PermissionKeys.cs`). `dotnet build` clean, 135 tests pass. Same day: pinned the transitive
+- **Permission keys** (2026-11-18, new in v2): anonymous `GET /api/permissions/keys` - every `RoleAction` as
+  KEY -> ActionId, read live (`PermissionKeyService`; the first, hard-coded version was replaced at the owner's request).
+  `dotnet build` clean, 139 tests pass; live run on :5120 returned all 165 rows, `?tenantCode=acme` 200, unknown 404. Same day: pinned the transitive
   `System.Security.Cryptography.Pkcs` to 9.0.21 (new advisories against 9.0.13 broke the build; remove the pin once
   `Microsoft.Data.SqlClient` >= 7.1.2).
 - **Region administration** (2026-10-05, new in v2): `/api/regions` - divisions/groups CRUD and moving countries,
