@@ -6,6 +6,7 @@ using Jaftim.Application.Modules.Navigation;
 using Jaftim.Application.Modules.Users;
 using Jaftim.Domain.Entities.Navigation;
 using Jaftim.Domain.Security;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 
 namespace Jaftim.Api.Controllers;
@@ -63,4 +64,10 @@ public sealed class PermissionsController(IPermissionCatalogService catalog, IVa
     [HasPermission(Permissions.AssignRoles)]
     public async Task<ActionResult<ApiResponse<IReadOnlyList<PermissionNode>>>> Catalog(CancellationToken ct) =>
         Ok(await catalog.GetCatalogAsync(ct));
+
+    /// <summary>Every frontend permission key with its ActionId (null = no RoleAction yet). Anonymous: static, no tenant or user data.</summary>
+    [HttpGet("keys")]
+    [AllowAnonymous]
+    public ActionResult<ApiResponse<IReadOnlyDictionary<string, int?>>> Keys() =>
+        Ok(PermissionKeys.All);
 }

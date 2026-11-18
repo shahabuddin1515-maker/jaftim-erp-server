@@ -21,6 +21,19 @@ public sealed class ApiSmokeTests : IClassFixture<ApiSmokeTests.Factory>
     }
 
     [Fact]
+    public async Task Permission_keys_are_anonymous_and_keep_null_values()
+    {
+        HttpResponseMessage response = await _client.GetAsync("/api/permissions/keys");
+        Assert.Equal(HttpStatusCode.OK, response.StatusCode);
+
+        using System.Text.Json.JsonDocument body = System.Text.Json.JsonDocument.Parse(await response.Content.ReadAsStringAsync());
+        System.Text.Json.JsonElement data = body.RootElement.GetProperty("data");
+        Assert.Equal(Jaftim.Domain.Security.PermissionKeys.All.Count, data.EnumerateObject().Count());
+        Assert.Equal(417, data.GetProperty("STOCK_READ").GetInt32());                                       // keys are not camel-cased
+        Assert.Equal(System.Text.Json.JsonValueKind.Null, data.GetProperty("OVERVIEW_VIEW").ValueKind);   // nulls are not dropped
+    }
+
+    [Fact]
     public async Task Login_with_invalid_body_is_400_problem_details()
     {
         HttpResponseMessage response = await _client.PostAsJsonAsync("/api/auth/login", new { email = "not-an-email", password = "" });

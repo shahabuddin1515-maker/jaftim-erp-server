@@ -38,6 +38,7 @@ Everything is data in the tenant database; nothing about modules or menus is har
 | PUT | `/api/navigation` | 304 | upsert one item; gate with `actionId` **or** mint a permission inline with `newPermissionName` (created under the parent node's permission) |
 | DELETE | `/api/navigation/{id}` | 304 | soft-delete the item and its subtree |
 | GET | `/api/permissions/catalog` | 304 | `RoleAction` tree: module -> screen -> action |
+| GET | `/api/permissions/keys` | **anonymous** | `{ STOCK_READ: 417, STOCK_DELETE: null, ... }` - the frontend's stable permission names -> ActionId (`null` = no `RoleAction` yet; several keys may share an id). Static, from `src/Jaftim.Domain/Security/PermissionKeys.cs`; the frontend checks the id against `permissions` from `/api/auth/me` |
 | PUT | `/api/permissions` | 304 | create (`actionId` null; `parentActionId` null = new module) or rename / re-parent a permission |
 | GET | `/api/roles` | 301 | roles |
 | PUT | `/api/roles` | 302 | create / rename a role |
