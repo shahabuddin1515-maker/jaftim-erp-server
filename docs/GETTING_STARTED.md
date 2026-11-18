@@ -134,6 +134,9 @@ See `docs/ARCHITECTURE.md`. Start with `docs/REWRITE_PLAN.md`, then `docs/CONVEN
 - 403 on an endpoint the user "should" have -> the role has no `RoleActionMapping` row for that ActionId. 12 roles
   have none at all (docs/DATABASE.md query).
 - Hangfire dashboard 401 -> `Hangfire:Dashboard:Password` not set.
+- CORS error from a front end -> in Development `Cors:AllowAnyOrigin` is `true` (appsettings.Development.json) and any
+  origin is allowed (dev tunnels, LAN). Elsewhere only `Cors:AllowedOrigins` is honoured; add the front end's origin
+  there. The API must be restarted to pick the change up.
 - A notification never arrives -> look at `SELECT * FROM NotificationOutbox ORDER BY OutboxId DESC`: `Status 0` with
   no lease = no API host is consuming `notifications`; `Status 2` = dead letter, the reason is in `LastError`.
 - An e-mail never arrives -> `EmailOutbox` likewise; `Status 1` with no mail = `EmailDelivery:Mode` is `Suppress`

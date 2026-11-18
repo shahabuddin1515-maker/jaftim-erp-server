@@ -124,12 +124,21 @@ builder.Services.AddRateLimiter(o =>
         _ => new FixedWindowRateLimiterOptions { PermitLimit = 10, Window = TimeSpan.FromMinutes(1), QueueLimit = 0 }));
 });
 
+// Cors:AllowAnyOrigin (Development only - dev tunnels, phones, LAN front ends) reflects any caller's origin instead
+// of the AllowedOrigins list. It reflects rather than using "*" because "*" cannot be combined with credentials
+// (SignalR negotiate sends them).
 string[] corsOrigins = builder.Configuration.GetSection("Cors:AllowedOrigins").Get<string[]>() ?? [];
-builder.Services.AddCors(o => o.AddDefaultPolicy(p => p
-    .WithOrigins(corsOrigins)
-    .AllowAnyHeader()
-    .AllowAnyMethod()
-    .AllowCredentials()));
+bool corsAllowAnyOrigin = builder.Configuration.GetValue<bool>("Cors:AllowAnyOrigin");
+builder.Services.AddCors(o => o.AddDefaultPolicy(p =>
+{
+    if (corsAllowAnyOrigin)
+        p.SetIsOriginAllowed(_ => true);
+    else
+        p.WithOrigins(corsOrigins);
+    p.AllowAnyHeader()
+     .AllowAnyMethod()
+     .AllowCredentials();
+}));
 
 // ---------- Realtime notifications ----------
 builder.Services.AddSignalR();
