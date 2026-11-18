@@ -21,7 +21,9 @@ No task is mid-edit. The tree is at a clean checkpoint.
 ## Recently Completed
 
 - **Permission keys** (2026-11-18, new in v2): anonymous `GET /api/permissions/keys` - frontend key -> ActionId map
-  (`PermissionKeys.cs`). Build + 135 tests pass with `-p:NuGetAudit=false` (see the build blocker below).
+  (`PermissionKeys.cs`). `dotnet build` clean, 135 tests pass. Same day: pinned the transitive
+  `System.Security.Cryptography.Pkcs` to 9.0.21 (new advisories against 9.0.13 broke the build; remove the pin once
+  `Microsoft.Data.SqlClient` >= 7.1.2).
 - **Region administration** (2026-10-05, new in v2): `/api/regions` - divisions/groups CRUD and moving countries,
   permission 905, over `database/v2/009`. Moves re-derive holders' tick rows; access never changes. `docs/USERS.md`.
 - **User regions** (2026-10-05, Module 2 leftover): `GET/PUT /api/users/{id}/regions` over `UserRegion_Get`
@@ -86,12 +88,7 @@ of the known failing `StockStatus_RefreshOne` stocks) under default retry - harm
 
 ## Open Questions / Blockers
 
-**Build blocker (found 2026-11-18):** `dotnet build` fails with NU1902/NU1903 (audit warnings are errors) - a new
-advisory against the transitive `System.Security.Cryptography.Pkcs` 9.0.13 (GHSA-846f-f764-76mx high,
-GHSA-2fmv-rv2c-59x7 moderate). Not fixed yet; needs a pinned patched version (check `dotnet list package
---include-transitive --vulnerable` for the parent). Until then verify with `dotnet build -p:NuGetAudit=false`.
-
-Owed by the owner/product, not blocking:
+No blockers. Owed by the owner/product, not blocking:
 
 1. **Release step for `v2/007`, `v2/008`, `v2/009`** (`008`/`009` only for the region endpoints): every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
    **before** this build is deployed there (without it notifications are logged as unqueueable and lost), and the API
