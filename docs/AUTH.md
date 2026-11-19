@@ -92,6 +92,16 @@ via `RemoteAccessAllowed`); off in Development.
 ### Frontend integration checklist
 1. Handle 409 `TenantSelectionRequired` on login by showing `memberships` and retrying with `tenantCode`.
 2. Store the access token in memory; keep the refresh token out of localStorage. On 401 -> `/api/auth/refresh` once.
+   **Refresh must be single-flight**: every refresh token works exactly once, and presenting an already-rotated one
+   is treated as theft - all of the account's refresh tokens are revoked and `TokenVersion` is bumped, so every
+   access token of that account (every tab, device and developer sharing the login) starts failing within 60 s,
+   long before its `exp` (reproduced 2026-11-19; audit event `RefreshReplay`). Parallel 401s must await one shared
+   refresh promise, tabs must coordinate (or not share the refresh token), and the new refresh token must replace
+   the old one before any other request can use it. Refreshing a minute before `accessTokenExpiresAtUtc` avoids the
+   401 burst altogether.
+   Telling the two 401s apart: an expired token's `WWW-Authenticate` carries
+   `error_description="The token expired at '...'"`; a revoked one (replay, logout-all, password change,
+   deactivation) carries only `error="invalid_token"` (the server log says `Token has been revoked.`).
 3. Offer a company switcher from `/api/auth/memberships` -> `/api/auth/switch-tenant`; replace both tokens.
 4. Hide/show by `permissions.includes(actionId)`; show `roles` with validity on the profile screen.
 5. Expect ProblemDetails on errors: `{ type, title, status, detail, instance, errors?, code?, memberships? }`.
