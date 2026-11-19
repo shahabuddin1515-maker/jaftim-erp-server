@@ -20,6 +20,8 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **`GET /api/lookups/office-locations`** (2026-11-19): `database/v2/013_Lookup_OfficeLocations.sql` (both local
+  tenants). Verified: build clean, 157 tests pass; live on :5150 returns 9/85/185/186, anonymous 401.
 - **Editable username on `POST`/`PUT /api/users`** (2026-11-19): new `database/v2/012_UserSave_V2.sql` (applied to
   both local tenants). Verified: build clean, 156 tests pass; live on :5150 (scratch build) - create with/without
   username, rename, omit-keeps, duplicate (`SAAD` vs existing `Saad`) 409, blank 400. Test users 23603/23604 were
@@ -111,11 +113,13 @@ No blockers. Owed by the owner/product, not blocking:
 1. **Release step for `v2/007`, `v2/008`, `v2/009`** (`008`/`009` only for the region endpoints): every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
    **before** this build is deployed there (without it notifications are logged as unqueueable and lost), and the API
    App Service needs `ConnectionStrings:Hangfire` (it now runs a Hangfire server). Live alone sets
-   `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010`, `v2/011`, `v2/012` and `catalog/003` are now
-   required too**: without them `GET /api/users`, every tagging list, `GET /api/roles`, `GET /api/tenants` and
-   `POST`/`PUT /api/users` fail.
+   `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010`-`v2/013` and `catalog/003` are now
+   required too**: without them `GET /api/users`, every tagging list, `GET /api/roles`, `GET /api/tenants`,
+   `POST`/`PUT /api/users` and `GET /api/lookups/office-locations` fail.
 2. 12 roles have zero `RoleActionMapping` rows (query in `docs/DATABASE.md`).
 3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
+4. Office-location id spaces: the new lookup returns `Base_Country` ids, the stored `OfficeLocation_CountryId` is
+   `Base_OriginCountry` ids. Whether to migrate the column is an owner decision (`docs/USERS.md` "Office location").
 
 ## Next Actions
 

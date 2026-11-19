@@ -21,4 +21,14 @@ public sealed class LookupsController(ILookupService lookups) : ApiControllerBas
             .ToArray();
         return Ok(await lookups.GetDropdownsAsync(names, ct));
     }
+
+    /// <summary>
+    /// The company's office-location countries: Base_Country rows with IsLocationCountry = 1 (live and active), sorted
+    /// by name - <c>{ id, name, alpha2Code }</c>. A short fixed list, so not paged. The ids are Base_Country ids: do not
+    /// send them as <c>officeLocationCountryId</c> on the user endpoints, which stores Base_OriginCountry ids.
+    /// </summary>
+    [HttpGet("office-locations")]
+    [HasPermission(Permissions.AuthTable)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<OfficeLocation>>>> GetOfficeLocations(CancellationToken ct) =>
+        Ok(await lookups.GetOfficeLocationsAsync(ct));
 }

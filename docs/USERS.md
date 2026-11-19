@@ -110,6 +110,21 @@ v2; the schema repair belongs to the hardening backlog in `docs/DATABASE.md`).
 6. `GetEntityHierarchyForUserAssignment` (the legacy read) offers inactive countries for ticking and filters
    `IsDeleted = 0` without `ISNULL`; v2 reads through `UserRegion_Get` (`database/v2/008`) instead.
 
+## Office location
+
+Two different country lists carry the name "office location", with **different id spaces**:
+
+| Source | Ids (local UAT copy, 2026-11-19) | Read by |
+|---|---|---|
+| `Base_OriginCountry` | 1 Australia, 2 Japan, 3 UAE, 4 UK, 5 Thailand ... 11 Pakistan | `UserProfileDetail.OfficeLocation_CountryId` (the stored value; 2 users hold 3 and 11), the legacy user form's "Office" dropdown (`table-name="Base_OriginCountry"`), `RPT_Lookup_OfficeLocations`, the receivables/payables reports' office filter |
+| `Base_Country` with `IsLocationCountry = 1` | 9 Australia, 85 Japan, 185 United Arab Emirates, 186 United Kingdom | `GET /api/lookups/office-locations` (new in v2, owner decision 2026-11-19), the public website's `web_load_all` |
+
+`IsLocationCountry` is `NULL` (not `0`) on every other `Base_Country` row. The owner chose `Base_Country` for the new
+lookup knowing this. **Its ids must not be sent as `officeLocationCountryId`** on `POST`/`PUT /api/users`: the legacy
+app and the reports would read 9 as Singapore and 185/186 as nothing. Until the stored column is migrated to
+`Base_Country` ids (a data change across both apps - owner decision), the user form's office dropdown still needs
+`GET /api/lookups?tables=Base_OriginCountry`. The user endpoints do not validate the id against either list.
+
 ## Not ported yet
 
 `UserController.OrgChart` (`GetOrgChart`) - still `todo` in `docs/MIGRATION_INVENTORY.md`.

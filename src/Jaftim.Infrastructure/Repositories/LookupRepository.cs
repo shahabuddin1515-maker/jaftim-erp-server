@@ -15,6 +15,9 @@ public sealed class LookupRepository(IDbExecutor db, IMemoryCache cache) : ILook
             SpCall.Procedure("GetDllAuthTableValues")
                 .With("@CSV_TableNames", string.Join(",", tableNames), DbType.String), ct);
 
+    public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
+        db.QueryAsync<OfficeLocation>(SpCall.Procedure("Lookup_OfficeLocations"), ct);
+
     public async Task<IReadOnlySet<string>> GetAllowedTableNamesAsync(CancellationToken ct = default)
     {
         IReadOnlySet<string>? cached = await cache.GetOrCreateAsync(AllowedTablesCacheKey, async entry =>

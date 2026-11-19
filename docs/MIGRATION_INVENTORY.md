@@ -29,6 +29,7 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 | Legacy | v2 | Perm | Status |
 |---|---|---|---|
 | `AuthFilterController.GetDllAuthTableValues` | `GET /api/lookups?tables=` | 2 | done |
+| - (new in v2, owner 2026-11-19) | `GET /api/lookups/office-locations` (`Lookup_OfficeLocations`, `v2/013`): `Base_Country` with `IsLocationCountry = 1`. Not the id space of `officeLocationCountryId` - `docs/USERS.md` "Office location" | 2 | done |
 | `AuthFilterController.GetAuthData` (SYS_AuthMethod keyword -> SP) | explicit endpoints per keyword: `GET /api/lookups/models?makeId=`, `/cities?countryId=`, `/discharge-ports?countryId=`, `/ports`, `/yards`, `/shipping-companies`, `/roles?userTypeId=`, `/reporting-line?roleId=`, `/shipment-parties?customerId=` (the 14 `SYS_Auth_*` procs) | 3 | todo |
 | `APIController/FilterController.GetData` (SYS_PublicMethod) | public website - see Module 9 | - | todo |
 | `APIController/BaseMakeController.BaseMakeGetAll` | covered by `/api/lookups?tables=Base_Make` | 2 | done |

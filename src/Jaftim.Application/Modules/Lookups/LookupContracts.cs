@@ -14,15 +14,22 @@ public interface ILookupRepository
 
     /// <summary>SYS_DropDownsWithAuth table names - the only values GetDropdownValuesAsync accepts.</summary>
     Task<IReadOnlySet<string>> GetAllowedTableNamesAsync(CancellationToken ct = default);
+
+    /// <summary>EXEC Lookup_OfficeLocations (database/v2/013) - Base_Country rows with IsLocationCountry = 1.</summary>
+    Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
 }
 
 public interface ILookupService
 {
     Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default);
+    Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
 }
 
 public sealed class LookupService(ILookupRepository repository) : ILookupService
 {
+    public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
+        repository.GetOfficeLocationsAsync(ct);
+
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default)
     {
         if (tableNames.Count == 0)

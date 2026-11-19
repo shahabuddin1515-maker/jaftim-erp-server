@@ -58,6 +58,20 @@ public sealed class SwaggerTests(ApiSmokeTests.Factory factory) : IClassFixture<
     }
 
     [Fact]
+    public async Task Office_locations_lookup_is_routed_permission_gated_and_takes_no_paging()
+    {
+        HttpClient client = factory.CreateClient();
+        using JsonDocument doc = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
+
+        JsonElement get = doc.RootElement.GetProperty("paths").GetProperty("/api/lookups/office-locations").GetProperty("get");
+        Assert.Contains("AuthTable", get.GetProperty("description").GetString());
+        Assert.True(get.GetProperty("responses").TryGetProperty("403", out _));
+        Assert.False(get.TryGetProperty("parameters", out JsonElement p) && p.GetArrayLength() > 0);   // fixed list, not paged
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/lookups/office-locations")).StatusCode);
+    }
+
+    [Fact]
     public async Task Swagger_ui_and_scalar_are_served_in_development()
     {
         HttpClient client = factory.CreateClient();
