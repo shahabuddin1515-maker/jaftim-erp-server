@@ -98,6 +98,8 @@ public interface IUserRegionRepository
 public interface IUserRegionService
 {
     Task<UserRegionsResponse> GetAsync(long userProfileId, CancellationToken ct = default);
+    /// <summary>Only the divisions, groups and countries the user holds (the tree pruned to granted countries).</summary>
+    Task<UserRegionsResponse> GetAssignedAsync(long userProfileId, CancellationToken ct = default);
     Task<UserRegionsResponse> SaveAsync(long userProfileId, SaveUserRegionsRequest request, CancellationToken ct = default);
 }
 
@@ -119,6 +121,12 @@ public sealed class UserRegionService(
     {
         await EnsureUserAsync(userProfileId, ct);
         return RegionTree.From(await regions.GetAsync(userProfileId, ct)).ToUserResponse(userProfileId);
+    }
+
+    public async Task<UserRegionsResponse> GetAssignedAsync(long userProfileId, CancellationToken ct = default)
+    {
+        await EnsureUserAsync(userProfileId, ct);
+        return RegionTree.From(await regions.GetAsync(userProfileId, ct)).ToUserResponse(userProfileId, assignedOnly: true);
     }
 
     public async Task<UserRegionsResponse> SaveAsync(long userProfileId, SaveUserRegionsRequest request, CancellationToken ct = default)

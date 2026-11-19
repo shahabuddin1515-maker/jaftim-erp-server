@@ -23,6 +23,16 @@ public sealed class UserRegionsController(IUserRegionService regions, IValidator
         Ok(await regions.GetAsync(userProfileId, ct));
 
     /// <summary>
+    /// Only what this user holds: the granted countries, and just the divisions and groups above them. Divisions and
+    /// groups with no granted country are left out. <c>unplacedCountries</c> lists only granted countries that sit in
+    /// no valid group. <c>selection</c> still says whether the user holds all or part of each division and group.
+    /// </summary>
+    [HttpGet("assigned")]
+    [HasPermission(Permissions.EmployeeDetail)]
+    public async Task<ActionResult<ApiResponse<UserRegionsResponse>>> GetAssigned(long userProfileId, CancellationToken ct) =>
+        Ok(await regions.GetAssignedAsync(userProfileId, ct));
+
+    /// <summary>
     /// Replace the user's regions. Whole divisions/groups expand to their active countries now (countries added to a
     /// group later are not picked up until the next save); countryIds add individual countries. Empty clears all.
     /// Unknown ids, a country in no group, or a newly picked inactive country are a 422.

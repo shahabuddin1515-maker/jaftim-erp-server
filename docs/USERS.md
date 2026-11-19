@@ -48,6 +48,7 @@ user on the legacy screen.
 | Endpoint | Perm | Behaviour |
 |---|---|---|
 | `GET` | 203 Employee Detail | the whole tree with, per node, `selection` (`All` / `Partial` / `None` of its **active** countries), `isTicked` (the stored row) and per country `isActive` / `isGranted`; plus `grantedCountryIds` and `unplacedCountries` |
+| `GET /assigned` | 203 Employee Detail | the same shape pruned to what the user **holds**: granted countries only, and only the groups and divisions above them; `unplacedCountries` lists only granted ones. Branches are kept by granted countries, not by ticks (a tick alone grants nothing - legacy data has ticks with no country under them). `selection` still compares against the whole group/division, so `Partial` tells the UI the user holds only part of it. New in v2 (read-only view for profile/detail screens) |
 | `PUT` `{ divisionIds, groupIds, countryIds }` | 548 User Hierarchy | replaces the regions: whole divisions/groups expand to their active countries **now**, `countryIds` add individual ones; the division/group rows written are **exactly the ancestors of the granted countries**; empty clears |
 
 Rules enforced in the service (the database has none of them - see defects): unknown ids, a group not under a

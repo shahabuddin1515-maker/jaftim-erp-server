@@ -163,6 +163,38 @@ public sealed class UserRegionServiceTests
         Assert.DoesNotContain(tree.Divisions.SelectMany(d => d.Groups), g => g.EntityId is 98 or 99);
     }
 
+    [Fact]
+    public async Task The_assigned_view_keeps_only_granted_countries_and_their_ancestors()
+    {
+        // Europe(2) and group 20 are ticked but France is not granted: a tick alone grants nothing, so they drop out.
+        var repo = new RegionRepoFake(Snapshot(ticked: [1, 10, 2, 20], granted: [100, 300]));
+
+        UserRegionsResponse tree = await Service(repo).GetAssignedAsync(7);
+
+        RegionDivisionNode asia = Assert.Single(tree.Divisions);
+        Assert.Equal((1L, RegionSelection.Partial), (asia.EntityId, asia.Selection));
+        RegionGroupNode eastern = Assert.Single(asia.Groups);                       // Middle East (none held) dropped
+        Assert.Equal((10L, RegionSelection.Partial), (eastern.EntityId, eastern.Selection));
+        Assert.Equal(new long[] { 100 }, eastern.Countries.Select(c => c.CountryId));
+        Assert.All(eastern.Countries, c => Assert.True(c.IsGranted));
+        Assert.Equal(new long[] { 300 }, tree.UnplacedCountries.Select(c => c.CountryId)); // 301 not held
+        Assert.Equal(new long[] { 100, 300 }, tree.GrantedCountryIds);
+    }
+
+    [Fact]
+    public async Task The_assigned_view_is_empty_for_a_user_without_regions_and_404_for_an_unknown_one()
+    {
+        var users = new FakeUsers();
+        users.Profiles[9] = null;
+        UserRegionService service = Service(new RegionRepoFake(Snapshot()), users);
+
+        UserRegionsResponse tree = await service.GetAssignedAsync(7);
+
+        Assert.Empty(tree.Divisions);
+        Assert.Empty(tree.UnplacedCountries);
+        await Assert.ThrowsAsync<NotFoundException>(() => service.GetAssignedAsync(9));
+    }
+
     private static UserRegionService Service(RegionRepoFake repo, FakeUsers? users = null, FakeAudit? audit = null) =>
         new(repo, users ?? new FakeUsers(), audit ?? new FakeAudit(), new SaveUserRegionsRequestValidator());
 

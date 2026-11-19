@@ -20,6 +20,10 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **`GET /api/users/{id}/regions/assigned`** (2026-11-19): the region tree pruned to the user's granted countries and
+  their groups/divisions (`docs/USERS.md`). No SQL change (reuses `UserRegion_Get`). Verified: build clean, 152 tests
+  pass; live on :5150 against `jaftim-local-db` for users 12461 (1 country -> 1 division/1 group), 132 (181 countries,
+  4 of 6 divisions) and 1 (all 208), every returned country granted and none missing; unknown user -> 404.
 - **Server-side paging for list endpoints** (2026-11-19, owner rule now in `docs/CONVENTIONS.md` "List endpoints"):
   `GET /api/users` and all six `GET /api/tagging/*` lists now take `page/pageSize/search/sortBy/sortDescending` and
   return `PagedResult<T>` (**breaking response shape** for any frontend that read a bare array). New

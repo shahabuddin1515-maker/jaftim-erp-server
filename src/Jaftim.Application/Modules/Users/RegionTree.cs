@@ -111,21 +111,28 @@ internal sealed class RegionTree
         if (bad.Length > 0) problems.Add($"{label}: {string.Join(", ", bad)}.");
     }
 
-    public UserRegionsResponse ToUserResponse(long userProfileId)
+    /// <summary>
+    /// The user's view of the tree. <paramref name="assignedOnly"/> prunes it to what the user holds: granted countries,
+    /// and only the groups and divisions above them. A tick without a granted country (legacy screen state) grants
+    /// nothing, so it does not keep a branch alive. Selection still compares against the whole group/division.
+    /// </summary>
+    public UserRegionsResponse ToUserResponse(long userProfileId, bool assignedOnly = false)
     {
+        bool Show(RegionCountryRow c) => !assignedOnly || _granted.Contains(c.CountryId);
+
         var divisions = _divisions.Values.OrderBy(d => d.EntityName).Select(d =>
         {
             var groups = GroupsOf(d.EntityId).OrderBy(g => g.EntityName).Select(g =>
             {
                 RegionCountryRow[] countries = PlacedCountriesOf(g.EntityId).OrderBy(c => c.CountryName).ToArray();
                 return new RegionGroupNode(g.EntityId, g.EntityName, SelectionOf(countries), _ticked.Contains(g.EntityId),
-                    countries.Select(UserNode).ToList());
-            }).ToList();
+                    countries.Where(Show).Select(UserNode).ToList());
+            }).Where(g => !assignedOnly || g.Countries.Count > 0).ToList();
             RegionCountryRow[] all = GroupsOf(d.EntityId).SelectMany(g => PlacedCountriesOf(g.EntityId)).ToArray();
             return new RegionDivisionNode(d.EntityId, d.EntityName, SelectionOf(all), _ticked.Contains(d.EntityId), groups);
-        }).ToList();
+        }).Where(d => !assignedOnly || d.Groups.Count > 0).ToList();
 
-        var unplaced = _countries.Values.Where(c => !IsPlaced(c)).OrderBy(c => c.CountryName).Select(UserNode).ToList();
+        var unplaced = _countries.Values.Where(c => !IsPlaced(c) && Show(c)).OrderBy(c => c.CountryName).Select(UserNode).ToList();
         return new UserRegionsResponse(userProfileId, divisions, _granted.Order().ToList(), unplaced);
     }
 
