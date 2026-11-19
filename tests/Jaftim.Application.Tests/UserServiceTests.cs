@@ -75,6 +75,58 @@ public sealed class UserServiceTests
     }
 
     [Fact]
+    public async Task Create_saves_the_given_username_or_falls_back_to_the_email()
+    {
+        var users = new UsersFake();
+        UserService service = Build(users, new CatalogFake());
+
+        await service.CreateAsync(Request("a@x.com") with { Username = "  Azhar1567 " }, CancellationToken.None);
+        await service.CreateAsync(Request("b@x.com"), CancellationToken.None);
+
+        Assert.Equal("Azhar1567", users.Saved[0].Username);   // trimmed
+        Assert.Equal("b@x.com", users.Saved[1].Username);     // legacy default: username = e-mail
+        Assert.Equal(new[] { "Azhar1567", "b@x.com" }, users.UsernameChecks);
+    }
+
+    [Fact]
+    public async Task A_username_used_by_someone_else_is_a_conflict_and_nothing_is_written()
+    {
+        var users = new UsersFake { Detail = new UserDetail { UserProfileId = 7, Username = "Mine", Email = "m@x.com", RoleId = 2, StatusId = 2 } };
+        users.TakenUsernames.Add("saad");
+        var catalog = new CatalogFake();
+        UserService service = Build(users, catalog);
+
+        await Assert.ThrowsAsync<ConflictException>(() => service.CreateAsync(Request("n@x.com") with { Username = "Saad" }, CancellationToken.None));
+        await Assert.ThrowsAsync<ConflictException>(() => service.UpdateAsync(7, Request(null) with { Username = "SAAD" }, CancellationToken.None));
+        Assert.Empty(users.Saved);
+        Assert.Empty(users.AspNetUsersInserted);
+        Assert.Empty(catalog.Ensured);
+    }
+
+    [Fact]
+    public async Task Update_changes_the_username_or_keeps_it_when_omitted_and_skips_the_check_when_unchanged()
+    {
+        var users = new UsersFake { Detail = new UserDetail { UserProfileId = 7, Username = "Saad", Email = "s@x.com", RoleId = 2, StatusId = 2 } };
+        users.TakenUsernames.Add("saad");   // a legacy duplicate: re-saving it unchanged must still work
+        UserService service = Build(users, new CatalogFake());
+
+        await service.UpdateAsync(7, Request(null), CancellationToken.None);
+        await service.UpdateAsync(7, Request(null) with { Username = "saad" }, CancellationToken.None);
+        await service.UpdateAsync(7, Request(null) with { Username = "Saad Khan" }, CancellationToken.None);
+
+        Assert.Equal(new[] { "Saad", "saad", "Saad Khan" }, users.Saved.Select(s => s.Username));
+        Assert.Equal(new[] { "Saad Khan" }, users.UsernameChecks);
+    }
+
+    [Fact]
+    public async Task A_blank_username_is_rejected_instead_of_silently_kept()
+    {
+        UserService service = Build(new UsersFake(), new CatalogFake());
+        await Assert.ThrowsAsync<Domain.Exceptions.ValidationException>(() =>
+            service.CreateAsync(Request("v@x.com") with { Username = "   " }, CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Toggle_refuses_self_deactivation()
     {
         var users = new UsersFake { Detail = new UserDetail { UserProfileId = 500, StatusId = 2, RoleId = 2 } };
@@ -130,11 +182,18 @@ public sealed class UserServiceTests
         {
             Saved.Add(args);
             if (Detail is not null && args.UserProfileId == Detail.UserProfileId)
-                Detail = new UserDetail { UserProfileId = Detail.UserProfileId, Email = Detail.Email, AspNetUserId = Detail.AspNetUserId, RoleId = args.RoleId, StatusId = args.StatusId };
+                Detail = new UserDetail { UserProfileId = Detail.UserProfileId, Username = args.Username, Email = Detail.Email, AspNetUserId = Detail.AspNetUserId, RoleId = args.RoleId, StatusId = args.StatusId };
             return Task.CompletedTask;
         }
         public Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default) => Task.CompletedTask;
         public Task InsertAspNetUserAsync(string id, string email, string passwordHash, CancellationToken ct = default) { AspNetUsersInserted.Add((id, email, passwordHash)); return Task.CompletedTask; }
+        public HashSet<string> TakenUsernames { get; } = new(StringComparer.OrdinalIgnoreCase);
+        public List<string> UsernameChecks { get; } = [];
+        public Task<bool> UsernameTakenAsync(string username, long exceptUserProfileId, CancellationToken ct = default)
+        {
+            UsernameChecks.Add(username);
+            return Task.FromResult(TakenUsernames.Contains(username));
+        }
     }
 
     private sealed class CatalogFake : IAuthRepository

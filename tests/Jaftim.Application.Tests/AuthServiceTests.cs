@@ -205,6 +205,7 @@ public sealed class AuthServiceTests
     public Task SaveAsync(UserSaveArgs args, CancellationToken ct = default) => Task.CompletedTask;
     public Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default) => Task.CompletedTask;
     public Task InsertAspNetUserAsync(string id, string email, string passwordHash, CancellationToken ct = default) => Task.CompletedTask;
+    public Task<bool> UsernameTakenAsync(string username, long exceptUserProfileId, CancellationToken ct = default) => Task.FromResult(false);
     }
 
     private sealed class FakeCatalog : IAuthRepository

@@ -40,8 +40,10 @@ public interface IUserRepository
     Task<Common.PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default);
     /// <summary>EXEC UserGetById.</summary>
     Task<UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default);
-    /// <summary>EXEC UserSave (insert when UserProfileId = 0). Returns nothing - fetch the new row by AspNetUserId.</summary>
+    /// <summary>EXEC UserSave_V2 (insert when UserProfileId = 0; database/v2/012). Returns nothing - fetch the new row by AspNetUserId.</summary>
     Task SaveAsync(UserSaveArgs args, CancellationToken ct = default);
+    /// <summary>Does a non-deleted profile other than <paramref name="exceptUserProfileId"/> already use this username?</summary>
+    Task<bool> UsernameTakenAsync(string username, long exceptUserProfileId, CancellationToken ct = default);
     /// <summary>EXEC ActiveInActiveCall.</summary>
     Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default);
     /// <summary>Inserts the tenant AspNetUsers row the legacy UserManager.CreateAsync used to create (no procedure exists).</summary>

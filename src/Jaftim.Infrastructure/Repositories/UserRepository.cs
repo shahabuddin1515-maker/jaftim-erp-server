@@ -87,12 +87,13 @@ public sealed class UserRepository(IDbExecutor db, IDateTimeProvider clock) : IU
     public Task<UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default) =>
         db.QueryFirstOrDefaultAsync<UserDetail>(SpCall.Procedure("UserGetById").With("@UserProfileId", userProfileId), ct);
 
-    // Parameter list copied verbatim from the legacy UserRepository.UserSave. Known procedure quirks, preserved:
-    // every INSERT also leaves a UserProfileDetail row with UserProfileId = 0 (unconditional delete+insert after the
-    // insert branch), and only @CreatedBy = 1 may change RemoteAccessAllowed.
+    // Parameter list copied verbatim from the legacy UserRepository.UserSave. UserSave_V2 (database/v2/012) is UserSave
+    // plus Username on update. Known procedure quirks, preserved: every INSERT also leaves a UserProfileDetail row with
+    // UserProfileId = 0 (unconditional delete+insert after the insert branch), and only @CreatedBy = 1 may change
+    // RemoteAccessAllowed.
     public Task SaveAsync(UserSaveArgs a, CancellationToken ct = default) =>
         db.ExecuteAsync(
-            SpCall.Procedure("UserSave")
+            SpCall.Procedure("UserSave_V2")
                 .With("@UserProfileId", a.UserProfileId)
                 .With("@Code", a.Code, DbType.String, 50)
                 .With("@FullName", a.FullName, DbType.String)
@@ -112,6 +113,17 @@ public sealed class UserRepository(IDbExecutor db, IDateTimeProvider clock) : IU
                 .With("@OfficeLocation_CountryId", a.OfficeLocationCountryId)
                 .With("@OfficialWhatsapp", a.OfficialWhatsapp, DbType.AnsiString, 200)
                 .With("@RemoteAccessAllowed", a.RemoteAccessAllowed), ct);
+
+    // Plain read like GetByIdAsync; served by IX_UserProfile_Username_Active.
+    public async Task<bool> UsernameTakenAsync(string username, long exceptUserProfileId, CancellationToken ct = default) =>
+        await db.QueryFirstOrDefaultAsync<int?>(
+            SpCall.Text("""
+                SELECT TOP (1) 1 FROM dbo.UserProfile
+                WHERE Username = @Username AND ISNULL(IsDeleted, 0) = 0 AND UserProfileId <> @Except
+                """)
+                .With("@Username", username, DbType.String, 2000)
+                .With("@Except", exceptUserProfileId)
+                .WithoutAudit(), ct) is not null;
 
     public Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default) =>
         db.ExecuteAsync(SpCall.Procedure("ActiveInActiveCall").With("@userProfileId", userProfileId), ct);

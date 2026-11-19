@@ -87,6 +87,9 @@ public sealed class UserDetail
 /// Create/update a staff user (legacy UserController.UserSave form). Email and Password apply on create only: the
 /// e-mail is the login identity and is immutable through this endpoint. Password may be omitted on create - a
 /// cryptographically random temporary password is then generated and returned once in the create response.
+/// Username is the legacy form's "Username" field - a display name, not a login identity (sign-in is by e-mail).
+/// Optional: on create it defaults to the e-mail; on update an omitted value keeps the stored one. A username used by
+/// another user is a 409 (InquirySave matches existing parties by username, so a clash could misattribute an inquiry).
 /// </summary>
 public sealed record UserUpsertRequest(
     string FullName,
@@ -105,7 +108,8 @@ public sealed record UserUpsertRequest(
     long? OfficeLocationCountryId = null,
     string? WhatsAppNumber = null,
     int? CustomerTagLimit = null,
-    bool RemoteAccessAllowed = false);
+    bool RemoteAccessAllowed = false,
+    string? Username = null);
 
 public sealed record UserCreatedResult(long UserProfileId, string AccountId, string Email, string? TemporaryPassword, bool LinkedExistingAccount);
 
@@ -121,6 +125,8 @@ public sealed class UserUpsertRequestValidator : AbstractValidator<UserUpsertReq
             .When(x => x.Password is not null);
         RuleFor(x => x.RoleId).GreaterThan(0);
         RuleFor(x => x.StatusId).Must(s => s is (int)UserStatus.Active or (int)UserStatus.Inactive).WithMessage("statusId must be 1 (Inactive) or 2 (Active).");
+        RuleFor(x => x.Username).Must(u => !string.IsNullOrWhiteSpace(u)).WithMessage("username cannot be blank; omit it instead.")
+            .MaximumLength(256).When(x => x.Username is not null);
         RuleFor(x => x.Code).MaximumLength(50);
         RuleFor(x => x.CountryCode).MaximumLength(10);
         RuleFor(x => x.WhatsAppNumber).MaximumLength(200);
@@ -195,6 +201,8 @@ public sealed class UserService(
         string email = request.Email.Trim();
         if (await users.GetByEmailAsync(email, ct) is not null)
             throw new ConflictException($"A user with e-mail '{email}' already exists in this company.");
+        string username = request.Username?.Trim() ?? email;
+        await EnsureUsernameFreeAsync(username, exceptUserProfileId: 0, ct);
 
         // Credential: reuse the catalog account when this person already exists in another tenant.
         Domain.Entities.Tenancy.Account? existing = await catalog.GetAccountByEmailAsync(email, ct);
@@ -215,7 +223,7 @@ public sealed class UserService(
         // Tenant AspNetUsers row (what UserManager.CreateAsync did) - the procedures and the legacy app read it.
         await users.InsertAspNetUserAsync(accountId, email, passwordHash, ct);
 
-        await users.SaveAsync(ToArgs(0, request, email, accountId), ct);
+        await users.SaveAsync(ToArgs(0, request, username, email, accountId), ct);
         UserProfileWithRole created = await users.GetByAspNetUserIdAsync(accountId, ct)
             ?? throw new InvalidOperationException("UserSave did not create the profile.");
 
@@ -236,8 +244,14 @@ public sealed class UserService(
         if (before.RoleId == RoleIds.Customer)
             throw new BusinessRuleException("Customer profiles are managed through the customer endpoints.");
 
+        // Username is editable (UserSave_V2 writes it on update; legacy UserSave dropped it). Only a changed value is
+        // checked for clashes, so the few legacy duplicates can still be re-saved unchanged.
+        string? username = request.Username?.Trim() ?? before.Username;
+        if (username is not null && !string.Equals(username, before.Username, StringComparison.OrdinalIgnoreCase))
+            await EnsureUsernameFreeAsync(username, userProfileId, ct);
+
         // Email/AspNetUserId are immutable here: the procedure ignores them on update and the login identity lives in the catalog.
-        await users.SaveAsync(ToArgs(userProfileId, request, before.Email, before.AspNetUserId), ct);
+        await users.SaveAsync(ToArgs(userProfileId, request, username, before.Email, before.AspNetUserId), ct);
         UserDetail after = await GetByIdAsync(userProfileId, ct);
 
         if (before.RoleId != after.RoleId) permissions.InvalidateUser(userProfileId);
@@ -271,8 +285,15 @@ public sealed class UserService(
             throw new BusinessRuleException("The Customer role cannot be assigned through the staff endpoints.");
     }
 
-    private static UserSaveArgs ToArgs(long userProfileId, UserUpsertRequest r, string? email, string? aspNetUserId) => new(
-        userProfileId, r.Code, r.FullName.Trim(), email, email, r.Url, aspNetUserId, r.RoleId, r.GenderId, r.StatusId,
+    /// <summary>Case-insensitive (the database collation is CI), across every non-deleted profile, staff or customer.</summary>
+    private async Task EnsureUsernameFreeAsync(string username, long exceptUserProfileId, CancellationToken ct)
+    {
+        if (await users.UsernameTakenAsync(username, exceptUserProfileId, ct))
+            throw new ConflictException($"The username '{username}' is already used by another user.");
+    }
+
+    private static UserSaveArgs ToArgs(long userProfileId, UserUpsertRequest r, string? username, string? email, string? aspNetUserId) => new(
+        userProfileId, r.Code, r.FullName.Trim(), username, email, r.Url, aspNetUserId, r.RoleId, r.GenderId, r.StatusId,
         r.CustomerTagLimit?.ToString(), r.Address, r.CountryCode, r.CountryId, r.CityId, r.ReportsToUserId,
         r.OfficeLocationCountryId, r.WhatsAppNumber, r.RemoteAccessAllowed);
 
