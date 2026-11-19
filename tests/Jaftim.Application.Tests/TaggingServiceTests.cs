@@ -1,4 +1,5 @@
 using Jaftim.Application.Abstractions;
+using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Notifications;
 using Jaftim.Application.Modules.Tagging;
 using Jaftim.Domain.Entities.Tagging;
@@ -75,10 +76,28 @@ public sealed class TaggingServiceTests
         var repo = new TaggingRepoFake();
         ITaggingService service = Build(repo, out _, out _);
 
-        await service.GetMyTaggedCustomersAsync();
-        await service.GetMyUntagHistoryAsync();
+        var paging = new PagedRequest { Page = 3, PageSize = 25, Search = "ali", SortBy = "fullName", SortDescending = true };
+        await service.GetMyTaggedCustomersAsync(paging);
+        await service.GetMyUntagHistoryAsync(paging);
 
         Assert.Equal([Caller.Id, Caller.Id], repo.AgentIdsRead);
+        Assert.Equal([paging, paging], repo.PagingRead);
+    }
+
+    [Fact]
+    public async Task Agent_and_available_lists_pass_the_paging_request_through_unchanged()
+    {
+        var repo = new TaggingRepoFake();
+        ITaggingService service = Build(repo, out _, out _);
+        var paging = new PagedRequest { Page = 2, PageSize = 50, Search = "x" };
+
+        await service.GetAgentsAsync(paging);
+        await service.GetTaggedCustomersAsync(7, paging);
+        await service.GetUntagHistoryAsync(7, paging);
+        await service.GetAvailableCustomersAsync(paging);
+
+        Assert.Equal([paging, paging, paging, paging], repo.PagingRead);
+        Assert.Equal([7L, 7L], repo.AgentIdsRead);
     }
 
     internal static ITaggingService Build(TaggingRepoFake repo, out AuditLog audit, out Notifications notify)
@@ -115,13 +134,16 @@ internal sealed class TaggingRepoFake : ITaggingRepository
     public List<(long Customer, long Agent)> Tagged { get; } = [];
     public List<(long Customer, long Agent)> Untagged { get; } = [];
     public List<long> AgentIdsRead { get; } = [];
+    public List<PagedRequest> PagingRead { get; } = [];
 
-    public Task<IReadOnlyList<TaggingAgent>> GetAgentsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TaggingAgent>>([]);
-    public Task<IReadOnlyList<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, CancellationToken ct = default)
-    { AgentIdsRead.Add(agentId); return Task.FromResult<IReadOnlyList<TaggingCustomer>>([]); }
-    public Task<IReadOnlyList<TaggingCustomer>> GetUntagHistoryAsync(long agentId, CancellationToken ct = default)
-    { AgentIdsRead.Add(agentId); return Task.FromResult<IReadOnlyList<TaggingCustomer>>([]); }
-    public Task<IReadOnlyList<TaggingCustomer>> GetAvailableCustomersAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TaggingCustomer>>([]);
+    public Task<PagedResult<TaggingAgent>> GetAgentsAsync(PagedRequest paging, CancellationToken ct = default)
+    { PagingRead.Add(paging); return Task.FromResult(PagedResult<TaggingAgent>.Empty(paging)); }
+    public Task<PagedResult<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, PagedRequest paging, CancellationToken ct = default)
+    { AgentIdsRead.Add(agentId); PagingRead.Add(paging); return Task.FromResult(PagedResult<TaggingCustomer>.Empty(paging)); }
+    public Task<PagedResult<TaggingCustomer>> GetUntagHistoryAsync(long agentId, PagedRequest paging, CancellationToken ct = default)
+    { AgentIdsRead.Add(agentId); PagingRead.Add(paging); return Task.FromResult(PagedResult<TaggingCustomer>.Empty(paging)); }
+    public Task<PagedResult<TaggingCustomer>> GetAvailableCustomersAsync(PagedRequest paging, CancellationToken ct = default)
+    { PagingRead.Add(paging); return Task.FromResult(PagedResult<TaggingCustomer>.Empty(paging)); }
     public Task<string?> TagCustomerAsync(long customerId, long agentId, CancellationToken ct = default)
     { Tagged.Add((customerId, agentId)); return Task.FromResult(TagResult); }
     public Task UntagCustomerAsync(long customerId, long agentId, CancellationToken ct = default)

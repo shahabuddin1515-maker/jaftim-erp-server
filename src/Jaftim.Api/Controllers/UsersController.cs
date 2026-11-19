@@ -1,5 +1,6 @@
 using Jaftim.Api.Contracts;
 using Jaftim.Api.Security;
+using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Users;
 using Jaftim.Domain.Security;
 using Microsoft.AspNetCore.Mvc;
@@ -12,11 +13,15 @@ namespace Jaftim.Api.Controllers;
 /// </summary>
 public sealed class UsersController(IUserService users) : ApiControllerBase
 {
-    /// <summary>Staff list (UserGetAll). Visibility follows the caller's primary role exactly as the legacy screen did.</summary>
+    /// <summary>
+    /// Paged staff list (UserGetAll_V2) with server-side search and sort. Visibility follows the caller's primary role
+    /// exactly as the legacy screen did. SortBy: code, fullName, email, roleName, userStatusName, taggedCount,
+    /// createdAt, modifiedAt.
+    /// </summary>
     [HttpGet]
     [HasPermission(Permissions.EmployeeListing)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<UserListItem>>>> GetAll([FromQuery] int? userTypeId, CancellationToken ct) =>
-        Ok(await users.GetAllAsync(userTypeId, ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<UserListItem>>>> GetAll([FromQuery] UserListRequest request, CancellationToken ct) =>
+        Ok(await users.GetAllAsync(request, ct));
 
     /// <summary>One staff user (UserGetById).</summary>
     [HttpGet("{userProfileId:long}")]

@@ -23,14 +23,15 @@ public sealed class TagCustomerRequestValidator : AbstractValidator<TagCustomerR
 
 public interface ITaggingRepository
 {
-    /// <summary>EXEC CustomerTagging_GetAllManagerAgent - roles 1/7 see every agent, everyone else only agents in their accessible countries.</summary>
-    Task<IReadOnlyList<TaggingAgent>> GetAgentsAsync(CancellationToken ct = default);
-    /// <summary>EXEC CustomerTagging_AgentTaggedCustomer - a Sales Executive (primary RoleId 2) gets rows only for themself.</summary>
-    Task<IReadOnlyList<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, CancellationToken ct = default);
-    /// <summary>EXEC CustomerTagging_AgentUnTaggedCustomerHistory - same RoleId 2 restriction.</summary>
-    Task<IReadOnlyList<TaggingCustomer>> GetUntagHistoryAsync(long agentId, CancellationToken ct = default);
-    /// <summary>EXEC CustomerTagging_AvailableCustomers - every customer-role party with no active tag.</summary>
-    Task<IReadOnlyList<TaggingCustomer>> GetAvailableCustomersAsync(CancellationToken ct = default);
+    // The list reads are the database/v2/010 _V2 procedures: legacy visibility, plus search/sort/paging in SQL.
+    /// <summary>EXEC CustomerTagging_GetAllManagerAgent_V2 - roles 1/7 see every agent, everyone else only agents in their accessible countries.</summary>
+    Task<PagedResult<TaggingAgent>> GetAgentsAsync(PagedRequest paging, CancellationToken ct = default);
+    /// <summary>EXEC CustomerTagging_AgentCustomers_V2 @Untagged = 0 (legacy _AgentTaggedCustomer) - a Sales Executive (primary RoleId 2) gets rows only for themself.</summary>
+    Task<PagedResult<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, PagedRequest paging, CancellationToken ct = default);
+    /// <summary>EXEC CustomerTagging_AgentCustomers_V2 @Untagged = 1 (legacy _AgentUnTaggedCustomerHistory) - same RoleId 2 restriction.</summary>
+    Task<PagedResult<TaggingCustomer>> GetUntagHistoryAsync(long agentId, PagedRequest paging, CancellationToken ct = default);
+    /// <summary>EXEC CustomerTagging_AvailableCustomers_V2 - every customer-role party with no active tag.</summary>
+    Task<PagedResult<TaggingCustomer>> GetAvailableCustomersAsync(PagedRequest paging, CancellationToken ct = default);
     /// <summary>EXEC CustomerTagging_TagCustomerToAgent. Returns the procedure's returnMsg: "Ok" or a rejection text.</summary>
     Task<string?> TagCustomerAsync(long customerId, long agentId, CancellationToken ct = default);
     /// <summary>EXEC CustomerTagging_UnTagCustomerFromAgent - deactivates the (customer, agent) tag, if any. Always "Ok".</summary>
@@ -39,13 +40,13 @@ public interface ITaggingRepository
 
 public interface ITaggingService
 {
-    Task<IReadOnlyList<TaggingAgent>> GetAgentsAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, CancellationToken ct = default);
-    Task<IReadOnlyList<TaggingCustomer>> GetUntagHistoryAsync(long agentId, CancellationToken ct = default);
+    Task<PagedResult<TaggingAgent>> GetAgentsAsync(PagedRequest paging, CancellationToken ct = default);
+    Task<PagedResult<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, PagedRequest paging, CancellationToken ct = default);
+    Task<PagedResult<TaggingCustomer>> GetUntagHistoryAsync(long agentId, PagedRequest paging, CancellationToken ct = default);
     /// <summary>The caller's own tagged customers ("My Tagging").</summary>
-    Task<IReadOnlyList<TaggingCustomer>> GetMyTaggedCustomersAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<TaggingCustomer>> GetMyUntagHistoryAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<TaggingCustomer>> GetAvailableCustomersAsync(CancellationToken ct = default);
+    Task<PagedResult<TaggingCustomer>> GetMyTaggedCustomersAsync(PagedRequest paging, CancellationToken ct = default);
+    Task<PagedResult<TaggingCustomer>> GetMyUntagHistoryAsync(PagedRequest paging, CancellationToken ct = default);
+    Task<PagedResult<TaggingCustomer>> GetAvailableCustomersAsync(PagedRequest paging, CancellationToken ct = default);
     Task TagAsync(TagCustomerRequest request, CancellationToken ct = default);
     Task UntagAsync(TagCustomerRequest request, CancellationToken ct = default);
 }
@@ -82,22 +83,23 @@ public sealed class TaggingService(
     /// <summary>The only success value of CustomerTagging_TagCustomerToAgent.</summary>
     private const string Ok = "Ok";
 
-    public Task<IReadOnlyList<TaggingAgent>> GetAgentsAsync(CancellationToken ct = default) => repository.GetAgentsAsync(ct);
+    public Task<PagedResult<TaggingAgent>> GetAgentsAsync(PagedRequest paging, CancellationToken ct = default) =>
+        repository.GetAgentsAsync(paging, ct);
 
-    public Task<IReadOnlyList<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, CancellationToken ct = default) =>
-        repository.GetTaggedCustomersAsync(agentId, ct);
+    public Task<PagedResult<TaggingCustomer>> GetTaggedCustomersAsync(long agentId, PagedRequest paging, CancellationToken ct = default) =>
+        repository.GetTaggedCustomersAsync(agentId, paging, ct);
 
-    public Task<IReadOnlyList<TaggingCustomer>> GetUntagHistoryAsync(long agentId, CancellationToken ct = default) =>
-        repository.GetUntagHistoryAsync(agentId, ct);
+    public Task<PagedResult<TaggingCustomer>> GetUntagHistoryAsync(long agentId, PagedRequest paging, CancellationToken ct = default) =>
+        repository.GetUntagHistoryAsync(agentId, paging, ct);
 
-    public Task<IReadOnlyList<TaggingCustomer>> GetMyTaggedCustomersAsync(CancellationToken ct = default) =>
-        repository.GetTaggedCustomersAsync(currentUser.UserProfileId, ct);
+    public Task<PagedResult<TaggingCustomer>> GetMyTaggedCustomersAsync(PagedRequest paging, CancellationToken ct = default) =>
+        repository.GetTaggedCustomersAsync(currentUser.UserProfileId, paging, ct);
 
-    public Task<IReadOnlyList<TaggingCustomer>> GetMyUntagHistoryAsync(CancellationToken ct = default) =>
-        repository.GetUntagHistoryAsync(currentUser.UserProfileId, ct);
+    public Task<PagedResult<TaggingCustomer>> GetMyUntagHistoryAsync(PagedRequest paging, CancellationToken ct = default) =>
+        repository.GetUntagHistoryAsync(currentUser.UserProfileId, paging, ct);
 
-    public Task<IReadOnlyList<TaggingCustomer>> GetAvailableCustomersAsync(CancellationToken ct = default) =>
-        repository.GetAvailableCustomersAsync(ct);
+    public Task<PagedResult<TaggingCustomer>> GetAvailableCustomersAsync(PagedRequest paging, CancellationToken ct = default) =>
+        repository.GetAvailableCustomersAsync(paging, ct);
 
     /// <summary>
     /// The procedure reports its rejections ("Limit Exceeded", "Customer does not exists in your assigned divisions")

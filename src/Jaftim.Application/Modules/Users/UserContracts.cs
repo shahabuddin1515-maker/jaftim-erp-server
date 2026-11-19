@@ -10,7 +10,17 @@ using Jaftim.Domain.Security;
 
 namespace Jaftim.Application.Modules.Users;
 
-/// <summary>UserGetAll row (staff grid). UserProfile.* plus the joined display columns.</summary>
+/// <summary>
+/// Staff list query (UserGetAll_V2). Search matches code, name, username, e-mail, role, country, phone, WhatsApp.
+/// SortBy: code, fullName, email, roleName, userStatusName, taggedCount, createdAt, modifiedAt (else legacy order).
+/// </summary>
+public sealed record UserListRequest : PagedRequest
+{
+    /// <summary>Only roles of this user type. The legacy UserGetAll declared it and ignored it; UserGetAll_V2 filters.</summary>
+    public int? UserTypeId { get; init; }
+}
+
+/// <summary>UserGetAll_V2 row (staff grid). The legacy UserGetAll columns, projected explicitly.</summary>
 public sealed class UserListItem
 {
     public long UserProfileId { get; set; }
@@ -143,7 +153,7 @@ public sealed record UserSaveArgs(
 public interface IUserService
 {
     /// <summary>Staff list; the legacy procedure decides visibility from the caller's PRIMARY role (Super Admin sees all, System Admin excludes admins).</summary>
-    Task<IReadOnlyList<UserListItem>> GetAllAsync(int? userTypeId, CancellationToken ct = default);
+    Task<PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default);
     Task<UserDetail> GetByIdAsync(long userProfileId, CancellationToken ct = default);
     Task<UserCreatedResult> CreateAsync(UserUpsertRequest request, CancellationToken ct = default);
     Task UpdateAsync(long userProfileId, UserUpsertRequest request, CancellationToken ct = default);
@@ -167,8 +177,8 @@ public sealed class UserService(
     ITenantContext tenant,
     IValidator<UserUpsertRequest> validator) : IUserService
 {
-    public Task<IReadOnlyList<UserListItem>> GetAllAsync(int? userTypeId, CancellationToken ct = default) =>
-        users.GetAllAsync(userTypeId, ct);
+    public Task<PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default) =>
+        users.GetAllAsync(request, ct);
 
     public async Task<UserDetail> GetByIdAsync(long userProfileId, CancellationToken ct = default) =>
         await users.GetDetailAsync(userProfileId, ct) is { } u && (u.IsDeleted ?? 0) == 0

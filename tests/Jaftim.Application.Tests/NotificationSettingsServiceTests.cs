@@ -90,7 +90,7 @@ public sealed class NotificationSettingsServiceTests
         public Task<IReadOnlyList<Jaftim.Domain.Entities.Users.Role>> GetRolesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Jaftim.Domain.Entities.Users.Role>>([]);
         public Task MirrorPasswordHashAsync(string aspNetUserId, string passwordHash, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<Jaftim.Application.Modules.Users.TenantCredentialRow>> GetCredentialRowsForSyncAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Jaftim.Application.Modules.Users.TenantCredentialRow>>([]);
-        public Task<IReadOnlyList<Jaftim.Application.Modules.Users.UserListItem>> GetAllAsync(int? userTypeId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Jaftim.Application.Modules.Users.UserListItem>>([]);
+        public Task<PagedResult<Jaftim.Application.Modules.Users.UserListItem>> GetAllAsync(Jaftim.Application.Modules.Users.UserListRequest request, CancellationToken ct = default) => Task.FromResult(PagedResult<Jaftim.Application.Modules.Users.UserListItem>.Empty(request));
         public Task<Jaftim.Application.Modules.Users.UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default) => Task.FromResult<Jaftim.Application.Modules.Users.UserDetail?>(null);
         public Task SaveAsync(Jaftim.Application.Modules.Users.UserSaveArgs args, CancellationToken ct = default) => Task.CompletedTask;
         public Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default) => Task.CompletedTask;

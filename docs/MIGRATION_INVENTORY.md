@@ -50,7 +50,7 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 
 | Legacy | v2 | Perm | Status |
 |---|---|---|---|
-| `UserController.UserGetAll` | `GET /api/users?userTypeId=` (`UserGetAll`; visibility branches on the caller PRIMARY role inside the SP) | 201 | done |
+| `UserController.UserGetAll` | `GET /api/users?userTypeId=&search=&sortBy=&page=&pageSize=` (`UserGetAll_V2`, paged in SQL; visibility branches on the caller PRIMARY role exactly as `UserGetAll`) | 201 | done |
 | `UserController.UserDetail` | `GET /api/users/{id}` (`UserGetById`) | 203 | done |
 | `EmployeeSectionGetById`, `StockGetAllByEmployee` | `GET /api/users/{id}/sections/{name}`, `/stocks` | 204 | todo |
 | `UserController.UserSave` (creates Identity user) | `POST /api/users` (catalog account reused-or-created + tenant `AspNetUsers` insert via `IPasswordHasher` + `UserSave` + `AccountTenant` membership; crypto-random temp password returned once), `PUT /api/users/{id}` (`UserSave`; email/login immutable). **Legacy quirks preserved**: `UserSave` leaves an orphan `UserProfileDetail` row with `UserProfileId = 0` on every insert; only `@CreatedBy = 1` can change `RemoteAccessAllowed`. | 202 | done |
@@ -83,7 +83,7 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 | `CustomerController.Contacted` | - | - | drop (superseded by contact status, README 6.3) |
 | `TaggedFromInquiries` | `POST /api/inquiries/{id}/tag` (`Inquiry_TaggedFromInquiries`, audited, `CUSTOMER_TAGGED`; 422 for an unlinked inquiry) | 550 | done |
 | `TaggedFromInquiriesBulk`, `UnTagFromInquiriesBulk` | `POST /api/inquiries/tag-bulk`, `/untag-bulk` - loops the single-row procedures, partial success, 422 only when nothing succeeded (`docs/INQUIRIES.md` "Tagging") | 550 | done |
-| `CustomerTaggingController.*` | `GET /api/tagging/agents` (526), `/agents/{id}/customers` (551), `/agents/{id}/history` (552), `/me/customers`, `/me/history` (907), `/available-customers` (550); `POST /api/tagging/tag`, `/untag` (550, audited, CUSTOMER_TAGGED/UNTAGGED). Rejections are 422 and notify nobody. `docs/INQUIRIES.md` "Customer tagging" | 526/550-552/907 | done |
+| `CustomerTaggingController.*` | Every GET list paged/searched/sorted in SQL (`v2/010` `_V2` procedures). `GET /api/tagging/agents` (526), `/agents/{id}/customers` (551), `/agents/{id}/history` (552), `/me/customers`, `/me/history` (907), `/available-customers` (550); `POST /api/tagging/tag`, `/untag` (550, audited, CUSTOMER_TAGGED/UNTAGGED). Rejections are 422 and notify nobody. `docs/INQUIRIES.md` "Customer tagging" | 526/550-552/907 | done |
 | `JaftimWebhooks` Function `POST /api/leads` | **Do not port without the owner's say-so.** Standing instruction (2026-09-23): the Azure Function keeps running as-is on its own connection string, and the whole ingestion chain (`InsertLead` -> `InquiryImport_FromLead` -> `InquirySave_FromLead` -> `CustomerSaveInternal`) stays untouched - `docs/INQUIRIES.md`, "Inbound leads are not handled here". A v2 `POST /api/public/leads` (bearer key vs `AuthorizationKeys`) is a *possible future* alternative, not queued work. | key | **not scheduled (owner constraint)** |
 | `PublicController.InquirySave` | `POST /api/public/inquiries` (crypto-random password) | anonymous + captcha/rate limit | todo |
 

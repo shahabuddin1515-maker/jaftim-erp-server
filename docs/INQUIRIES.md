@@ -157,11 +157,14 @@ customer deactivates every other row for that customer, so it *moves* them.
 
 | Endpoint | Procedure | Perm (legacy `_CSS_` gate) |
 |---|---|---|
-| `GET /api/tagging/agents` | `CustomerTagging_GetAllManagerAgent` | 526 (sidebar entry) |
-| `GET /api/tagging/agents/{id}/customers` | `CustomerTagging_AgentTaggedCustomer` | 551 (Tagged History tab) |
-| `GET /api/tagging/agents/{id}/history` | `CustomerTagging_AgentUnTaggedCustomerHistory` | 552 (UnTagged History tab) |
+| `GET /api/tagging/agents` | `CustomerTagging_GetAllManagerAgent_V2` (legacy `_GetAllManagerAgent`) | 526 (sidebar entry) |
+| `GET /api/tagging/agents/{id}/customers` | `CustomerTagging_AgentCustomers_V2 @Untagged=0` (legacy `_AgentTaggedCustomer`) | 551 (Tagged History tab) |
+| `GET /api/tagging/agents/{id}/history` | `CustomerTagging_AgentCustomers_V2 @Untagged=1` (legacy `_AgentUnTaggedCustomerHistory`) | 552 (UnTagged History tab) |
 | `GET /api/tagging/me/customers` · `me/history` | the same two, for the caller | 907 (v2 "My Tagging", seeded for role 2) |
-| `GET /api/tagging/available-customers` | `CustomerTagging_AvailableCustomers` | 550 |
+| `GET /api/tagging/available-customers` | `CustomerTagging_AvailableCustomers_V2` (legacy `_AvailableCustomers`) | 550 |
+
+Every list read is paged, searched and sorted in SQL (`database/v2/010`); the `_V2` copies keep the legacy
+visibility and the defects below (inner join on the untagger, `NOT IN` over a nullable column) unchanged.
 | `POST /api/tagging/tag` · `untag` `{ customerId, agentId }` | `CustomerTagging_TagCustomerToAgent` / `_UnTagCustomerFromAgent` | 550 |
 
 `_CSS_553` ("Cannot Tag Customer") only hides the Assigned Agent column of the legacy Customers list; no endpoint

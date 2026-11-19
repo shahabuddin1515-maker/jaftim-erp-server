@@ -36,8 +36,8 @@ public interface IUserRepository
 
     // ----- staff CRUD (legacy UserController) -----
 
-    /// <summary>EXEC UserGetAll  - visibility branches on the caller PRIMARY role inside the procedure.</summary>
-    Task<IReadOnlyList<UserListItem>> GetAllAsync(int? userTypeId, CancellationToken ct = default);
+    /// <summary>EXEC UserGetAll_V2 - UserGetAll's visibility (caller PRIMARY role) plus search/sort/paging in SQL.</summary>
+    Task<Common.PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default);
     /// <summary>EXEC UserGetById.</summary>
     Task<UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default);
     /// <summary>EXEC UserSave (insert when UserProfileId = 0). Returns nothing - fetch the new row by AspNetUserId.</summary>

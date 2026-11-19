@@ -204,7 +204,7 @@ internal sealed class FakeUsers : IUserRepository
     public Task<IReadOnlyList<Role>> GetRolesAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Role>>(Roles);
     public Task MirrorPasswordHashAsync(string aspNetUserId, string passwordHash, CancellationToken ct = default) => Task.CompletedTask;
     public Task<IReadOnlyList<TenantCredentialRow>> GetCredentialRowsForSyncAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TenantCredentialRow>>([]);
-    public Task<IReadOnlyList<UserListItem>> GetAllAsync(int? userTypeId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<UserListItem>>([]);
+    public Task<Jaftim.Application.Common.PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default) => Task.FromResult(Jaftim.Application.Common.PagedResult<UserListItem>.Empty(request));
     public Task<UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default) => Task.FromResult<UserDetail?>(null);
     public Task SaveAsync(UserSaveArgs args, CancellationToken ct = default) => Task.CompletedTask;
     public Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default) => Task.CompletedTask;

@@ -1,5 +1,6 @@
 using Jaftim.Api.Contracts;
 using Jaftim.Api.Security;
+using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Tagging;
 using Jaftim.Domain.Entities.Tagging;
 using Jaftim.Domain.Security;
@@ -15,44 +16,49 @@ namespace Jaftim.Api.Controllers;
 [Route("api/tagging")]
 public sealed class TaggingController(ITaggingService tagging) : ApiControllerBase
 {
+    // Every list below is paged, searched and sorted in SQL (database/v2/010). Customer-list search covers code, name,
+    // e-mail, phone, WhatsApp, country, customer type and port (history also "untagged by"); customer-list SortBy:
+    // code, fullName, countryName, customerType, portOfDischarge, modifiedAt, numberOfTimesTagged, unTaggedDate, unTaggedBy.
+
     /// <summary>
     /// Agents with their active and all-time customer counts. Roles 1 and 7 see every agent; everyone else only
-    /// agents in the countries they can access.
+    /// agents in the countries they can access. Search: code, name, e-mail, role, country, phone. SortBy: code,
+    /// fullName, email, countryName, activeCustomerCount, totalCustomerCount, modifiedAt.
     /// </summary>
     [HttpGet("agents")]
     [HasPermission(Permissions.CustomerTaggingModule)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<TaggingAgent>>>> GetAgents(CancellationToken ct) =>
-        Ok(await tagging.GetAgentsAsync(ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<TaggingAgent>>>> GetAgents([FromQuery] PagedRequest paging, CancellationToken ct) =>
+        Ok(await tagging.GetAgentsAsync(paging, ct));
 
     /// <summary>Customers currently tagged to an agent. A Sales Executive gets an empty list for anyone but themself.</summary>
     [HttpGet("agents/{agentId:long}/customers")]
     [HasPermission(Permissions.TaggedHistory)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<TaggingCustomer>>>> GetTaggedCustomers(long agentId, CancellationToken ct) =>
-        Ok(await tagging.GetTaggedCustomersAsync(agentId, ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<TaggingCustomer>>>> GetTaggedCustomers(long agentId, [FromQuery] PagedRequest paging, CancellationToken ct) =>
+        Ok(await tagging.GetTaggedCustomersAsync(agentId, paging, ct));
 
     /// <summary>Customers untagged from an agent, with when and by whom. Same Sales Executive restriction.</summary>
     [HttpGet("agents/{agentId:long}/history")]
     [HasPermission(Permissions.UnTaggedHistory)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<TaggingCustomer>>>> GetUntagHistory(long agentId, CancellationToken ct) =>
-        Ok(await tagging.GetUntagHistoryAsync(agentId, ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<TaggingCustomer>>>> GetUntagHistory(long agentId, [FromQuery] PagedRequest paging, CancellationToken ct) =>
+        Ok(await tagging.GetUntagHistoryAsync(agentId, paging, ct));
 
     /// <summary>The caller's own tagged customers ("My Tagging").</summary>
     [HttpGet("me/customers")]
     [HasPermission(Permissions.MyTaggingAgent)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<TaggingCustomer>>>> GetMyTaggedCustomers(CancellationToken ct) =>
-        Ok(await tagging.GetMyTaggedCustomersAsync(ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<TaggingCustomer>>>> GetMyTaggedCustomers([FromQuery] PagedRequest paging, CancellationToken ct) =>
+        Ok(await tagging.GetMyTaggedCustomersAsync(paging, ct));
 
     /// <summary>Customers untagged from the caller.</summary>
     [HttpGet("me/history")]
     [HasPermission(Permissions.MyTaggingAgent)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<TaggingCustomer>>>> GetMyUntagHistory(CancellationToken ct) =>
-        Ok(await tagging.GetMyUntagHistoryAsync(ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<TaggingCustomer>>>> GetMyUntagHistory([FromQuery] PagedRequest paging, CancellationToken ct) =>
+        Ok(await tagging.GetMyUntagHistoryAsync(paging, ct));
 
-    /// <summary>Every customer-role party with no active tag (unpaged, as the legacy screen).</summary>
+    /// <summary>Customer-role parties with no active tag.</summary>
     [HttpGet("available-customers")]
     [HasPermission(Permissions.CustomerTagging)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<TaggingCustomer>>>> GetAvailableCustomers(CancellationToken ct) =>
-        Ok(await tagging.GetAvailableCustomersAsync(ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<TaggingCustomer>>>> GetAvailableCustomers([FromQuery] PagedRequest paging, CancellationToken ct) =>
+        Ok(await tagging.GetAvailableCustomersAsync(paging, ct));
 
     /// <summary>
     /// Tags a customer to an agent, replacing any existing tag. 422 when the agent is at their tagging limit or the

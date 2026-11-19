@@ -60,7 +60,7 @@ Procedures that are stale siblings (confirm the live caller before use): `StockG
    here - they are never folded into an unrelated script.
 2. **Every v2 script** goes in `database/v2/NNN_Name.sql`: numbered, idempotent (`IF OBJECT_ID ... IS NULL`,
    `CREATE OR ALTER`), `SET QUOTED_IDENTIFIER ON` in its own batch at the top. Apply every tenant script to
-   **every** local tenant database. Next free number: **010**. (`002` is used twice - `002_AuditLog.sql` and
+   **every** local tenant database. Next free number: **011**. (`002` is used twice - `002_AuditLog.sql` and
    `002_Hangfire_Database.sql`, which targets the separate jobs database; don't repeat that, take the next number.)
 3. **Audit trio contract.** Procedures the API calls with default injection must declare
    `@CreatedBy BIGINT, @CreatedAt DATETIME, @CompanyId BIGINT = NULL`. `@CreatedBy` is `UserProfile.UserProfileId`.
@@ -87,6 +87,7 @@ Procedures that are stale siblings (confirm the live caller before use): `StockG
 | `v2/007_Messaging_Outbox.sql` | `NotificationOutbox`, `EmailOutbox` (the notification and e-mail pipelines' queues) + per table `_Enqueue` (audit trio), `_ClaimById`, `_ClaimDue`, `_MarkSucceeded`, `_MarkFailed`, `_Purge`, and `NotificationOutbox_MarkPersisted`. Lifecycle in the file header and `docs/ARCHITECTURE.md` "Messaging and job pipelines". **Required by both hosts** - every notification goes through it | applied to both local tenants (2026-10-05), exercised end-to-end locally |
 | `v2/008_UserRegion.sql` | `UserRegion_Get` (read-only: region tree + one user's `UserEntities`/`UserCountries`, with the country active flag). Required by `/api/users/{id}/regions`; saving stays on the legacy `AssignEntitiesToUser` - `docs/USERS.md` | applied to both local tenants (2026-10-05), exercised end-to-end locally |
 | `v2/009_RegionAdmin.sql` | `Region_SaveEntity`, `Region_DeleteEntity`, `Region_MoveCountry`, `UserRegion_RederiveTicks` - the first writers of `Entity` (QUOTED_IDENTIFIER ON: the table has a filtered index). No schema change; each re-checks its rules under lock. Required by `/api/regions` - `docs/USERS.md` | applied to both local tenants (2026-10-05), exercised end-to-end locally and fully reverted |
+| `v2/010_PagedLists.sql` | `UserGetAll_V2`, `CustomerTagging_GetAllManagerAgent_V2`, `CustomerTagging_AgentCustomers_V2` (replaces both `_AgentTaggedCustomer` and `_AgentUnTaggedCustomerHistory` via `@Untagged`), `CustomerTagging_AvailableCustomers_V2`: the legacy visibility rules copied verbatim, plus `@Search/@SortBy/@SortDescending/@PageNumber/@PageSize` in SQL (contract: `docs/CONVENTIONS.md` "List endpoints"). Read-only, no schema change. `UserGetAll_V2` makes `@UserTypeId` filter (legacy declared and ignored it). **Required by `GET /api/users` and every `GET /api/tagging/*` list** | applied to both local tenants (2026-11-19); id sets equal the legacy procedure's for callers of every role branch (29 cases, both tenants); exercised through the API |
 | `v2/002_Hangfire_Database.sql` | notes for creating the jobs database | local `jaftim-local-jobs` created |
 
 Outbox tables hard-delete their succeeded rows after 14 days (`_Purge`, called by the sweep) - they are queues, not

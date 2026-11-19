@@ -1,5 +1,6 @@
 using System.Data;
 using Jaftim.Application.Abstractions;
+using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Users;
 using Jaftim.Domain.Entities.Lookups;
 using Jaftim.Domain.Entities.Users;
@@ -80,8 +81,8 @@ public sealed class UserRepository(IDbExecutor db, IDateTimeProvider clock) : IU
 
     // ----- staff CRUD (legacy UserController -> UserRepository) -----
 
-    public Task<IReadOnlyList<UserListItem>> GetAllAsync(int? userTypeId, CancellationToken ct = default) =>
-        db.QueryAsync<UserListItem>(SpCall.Procedure("UserGetAll").With("@UserTypeId", userTypeId), ct);
+    public Task<PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default) =>
+        db.QueryPagedAsync<UserListItem>(SpCall.Procedure("UserGetAll_V2").With("@UserTypeId", request.UserTypeId), request, ct);
 
     public Task<UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default) =>
         db.QueryFirstOrDefaultAsync<UserDetail>(SpCall.Procedure("UserGetById").With("@UserProfileId", userProfileId), ct);

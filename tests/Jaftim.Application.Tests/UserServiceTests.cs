@@ -124,7 +124,7 @@ public sealed class UserServiceTests
             Task.FromResult<IReadOnlyList<Role>>([new Role { RoleId = 2, RoleName = "Sales Executive" }, new Role { RoleId = 3, RoleName = "Customer" }]);
         public Task MirrorPasswordHashAsync(string aspNetUserId, string passwordHash, CancellationToken ct = default) => Task.CompletedTask;
         public Task<IReadOnlyList<TenantCredentialRow>> GetCredentialRowsForSyncAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<TenantCredentialRow>>([]);
-        public Task<IReadOnlyList<UserListItem>> GetAllAsync(int? userTypeId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<UserListItem>>([]);
+        public Task<Jaftim.Application.Common.PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default) => Task.FromResult(Jaftim.Application.Common.PagedResult<UserListItem>.Empty(request));
         public Task<UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default) => Task.FromResult(Detail);
         public Task SaveAsync(UserSaveArgs args, CancellationToken ct = default)
         {

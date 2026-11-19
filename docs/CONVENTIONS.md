@@ -28,6 +28,30 @@ Follow the reference module (`Stock` read path) exactly. Copy its shape; do not 
    binding. Run `dotnet test`.
 9. **Inventory**: tick the legacy action off in `docs/MIGRATION_INVENTORY.md`.
 
+## List endpoints: always paged, searched and sorted on the server (owner rule, 2026-11-19)
+
+Any endpoint that lists business records - rows that grow with use (staff, customers, stock, inquiries,
+taggings, notifications, audit) - returns `PagedResult<T>` and takes `PagedRequest` (or a `sealed record` deriving
+from it for extra filters: `[FromQuery] UserListRequest request`). Never return a whole table as `IReadOnlyList<T>`.
+
+- **Paging happens in SQL**, never by filtering a full result in C#. If the legacy procedure returns everything,
+  write a `Name_V2` that copies its visibility rules verbatim and adds, as trailing params before the audit trio:
+  `@Search NVARCHAR(200)`, `@SortBy NVARCHAR(50)`, `@SortDescending BIT`, `@PageNumber INT`, `@PageSize INT`.
+  It returns the page rows, then `TotalRecords`. Copy the shape of `database/v2/010_PagedLists.sql`: filtered rows
+  into `#Rows` with `OPTION (RECOMPILE)`, LIKE wildcards in the term escaped, page size clamped to 1..200, a
+  whitelisted `CASE` sort (unknown keys fall back to the legacy order) and a **unique tie-break** so pages never
+  overlap. Project explicit columns, not `UP.*`.
+- **Repository**: `db.QueryPagedAsync<T>(SpCall.Procedure("Name_V2").With(...filters), request, ct)`
+  (`Infrastructure/Data/PagedQuery.cs` adds the five params and reads both result sets).
+- **Verify** the `_V2` against the legacy procedure: same id set (all pages, no search) for a caller of every
+  visibility branch, before the endpoint is called done.
+- Document the search columns and the `SortBy` keys in the action's `/// <summary>` (that is the Swagger text).
+
+Not paged: dropdown/lookup sources (`/api/lookups`), menus and permission trees (edited as a whole), a single
+record's tabs (stock sections/flags/notes/files, a customer's inquiries and interactions), edit forms (a user's
+roles/regions) and small configuration registries (roles, tenants, notification types). If one of these starts to
+grow, it moves into the rule above.
+
 ## Catalog vs tenant
 
 - Anything about identity, tenants or sessions -> catalog: `ICatalogDbExecutor`, `Catalog_*` procedure in
