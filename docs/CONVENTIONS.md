@@ -49,7 +49,8 @@ from it for extra filters: `[FromQuery] UserListRequest request`). Never return 
 
 Not paged: dropdown/lookup sources (`/api/lookups`), menus and permission trees (edited as a whole), a single
 record's tabs (stock sections/flags/notes/files, a customer's inquiries and interactions), edit forms (a user's
-roles/regions) and small configuration registries (roles, tenants, notification types). If one of these starts to
+roles/regions) and small configuration registries (notification types). Roles and tenants are paged like any other
+list (owner, 2026-11-19); a dropdown that needs all of them passes `pageSize=200`. If one of these starts to
 grow, it moves into the rule above.
 
 ## Catalog vs tenant

@@ -15,11 +15,14 @@ namespace Jaftim.Api.Controllers;
 /// </summary>
 public sealed class RolesController(IRoleService roles, IValidator<RoleUpsert> roleValidator) : ApiControllerBase
 {
-    /// <summary>All active roles.</summary>
+    /// <summary>
+    /// Paged list of active roles (RolesGetAll_V2). Search: role name, user type, default path. SortBy: roleName,
+    /// userTypeName, createdAt, modifiedAt (default newest first). A dropdown wanting every role passes pageSize=200.
+    /// </summary>
     [HttpGet]
     [HasPermission(Permissions.RoleListing)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<Role>>>> GetAll(CancellationToken ct) =>
-        Ok(await roles.GetAllAsync(ct));
+    public async Task<ActionResult<ApiResponse<PagedResult<Role>>>> GetAll([FromQuery] PagedRequest paging, CancellationToken ct) =>
+        Ok(await roles.GetAllAsync(paging, ct));
 
     /// <summary>Create or rename a role.</summary>
     [HttpPut]

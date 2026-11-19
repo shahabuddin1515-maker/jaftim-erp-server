@@ -14,7 +14,7 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 |---|---|---|---|
 | Identity Login page | `POST /api/auth/login` (+ `tenantCode`), `/refresh`, `/switch-tenant`, `GET /api/auth/memberships`, `/logout`, `GET /api/auth/me`, `POST /api/auth/change-password` | - | done (catalog-backed, multi-tenant) |
 | `BaseController` session/rights | JWT claims (`tid`, `uid`, primary `rid`) + `[HasPermission]` + `CachedPermissionService` (union over effective roles) | - | done |
-| - (new) | `GET /api/tenants`, `GET /api/audit?entityType=&entityId=` | 304 | done |
+| - (new) | `GET /api/tenants` (paged, `Catalog_Tenant_GetPage`), `GET /api/audit?entityType=&entityId=` | 304 | done |
 | `_SidebarPartial.cshtml` (hand-written menu + `R_CSS` hiding, RoleId branches) | `GET /api/navigation/me` (data-driven tree filtered by effective permissions/roles), `GET/PUT/DELETE /api/navigation` (admin), `GET /api/permissions/catalog` (RoleAction tree) - `docs/NAVIGATION.md` | any / 304 | done |
 | `BaseController` IP allowlist | `IpAllowlistMiddleware` | - | done |
 | `BaseController.SaveActionURL` | `RequestAuditMiddleware` | - | done |
@@ -57,7 +57,7 @@ is the `RoleAction.ActionId` the legacy `_CSS_###` class used on that screen/but
 | `UploadUserImage` (User + Customer) | `POST /api/users/{id}/image` | 202 | todo |
 | `ActiveInActiveCall` | `POST /api/users/{id}/toggle-active` (+ `Catalog_Account_BumpTokenVersion` on deactivation, self-deactivation refused) | 202 | done |
 | - (new: multiple / time-bound roles) | `GET/POST /api/users/{id}/roles`, `DELETE ./{roleId}`, `PUT ./primary` (`UserRole_*`, `UserProfile_SetPrimaryRole`) | 203/202 | done |
-| `RolesGetAll`, `RoleSave`, `AssignRoles` (GET/POST), `GetRoleRightsByRoleId` | `GET /api/roles`, `PUT /api/roles`, `GET /api/roles/{id}/permissions` (tree + granted), `PUT /api/roles/{id}/permissions` (`RoleActionMapping_Replace`, ancestors added, cache invalidated, audited) | 301/302/304 | done |
+| `RolesGetAll`, `RoleSave`, `AssignRoles` (GET/POST), `GetRoleRightsByRoleId` | `GET /api/roles` (paged, `RolesGetAll_V2`), `PUT /api/roles`, `GET /api/roles/{id}/permissions` (tree + granted), `PUT /api/roles/{id}/permissions` (`RoleActionMapping_Replace`, ancestors added, cache invalidated, audited) | 301/302/304 | done |
 | - (new) | `PUT /api/permissions` (create/rename/re-parent a RoleAction, ids 900+), `GET /api/permissions/catalog`; navigation upsert accepts `newPermissionName` - `docs/NAVIGATION.md` | 304 | done |
 | - (new) | `GET /api/permissions/keys` - every `RoleAction` as KEY -> ActionId, live from the tenant DB (`PermissionKeyService`) - `docs/NAVIGATION.md` | anonymous | done |
 | `AssignEntities` (GET/POST), `UserEntityHierarchy`, UserDetail entity tab | `GET /api/users/{id}/regions` (203; full tree + selection, replaces both read views) · `PUT /api/users/{id}/regions` (548; whole divisions/groups expand to active countries, ancestor rows derived, validated, status row checked, audited) over `UserRegion_Get` (`v2/008`) + legacy `AssignEntitiesToUser`. Countries stay the only access input (owner, 2026-10-05) - `docs/USERS.md` | 203/548 | done |

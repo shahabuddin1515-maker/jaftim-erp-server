@@ -1,5 +1,6 @@
 using System.Data;
 using Jaftim.Application.Abstractions;
+using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Tenancy;
 using Jaftim.Domain.Entities.Tenancy;
 using Jaftim.Infrastructure.Data;
@@ -70,4 +71,8 @@ public sealed class TenantRepository(ICatalogDbExecutor catalog) : ITenantReposi
     public Task<Tenant?> GetByCodeAsync(string code, CancellationToken ct = default) =>
         catalog.QueryFirstOrDefaultAsync<Tenant>(
             SpCall.Procedure("Catalog_Tenant_GetByCode").With("@Code", code, DbType.String, 50).WithoutAudit(), ct);
+
+    // database/catalog/003_Tenant_GetPage.sql
+    public Task<PagedResult<TenantSummary>> GetPageAsync(PagedRequest paging, CancellationToken ct = default) =>
+        catalog.QueryPagedAsync<TenantSummary>(SpCall.Procedure("Catalog_Tenant_GetPage").WithoutAudit(), paging, ct);
 }

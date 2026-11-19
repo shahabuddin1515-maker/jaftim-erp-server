@@ -46,7 +46,10 @@ public sealed class PermissionUpsertValidator : AbstractValidator<PermissionUpse
 /// <summary>Role / RoleAction / RoleActionMapping procedures (legacy RolesGetAll, RoleSave, GetRoleRightsByRoleId + v2 RoleAction_Save, RoleActionMapping_Replace).</summary>
 public interface IRoleRepository
 {
+    /// <summary>EXEC RolesGetAll - every non-deleted role. Internal use (role save, cache invalidation); the API lists through GetPageAsync.</summary>
     Task<IReadOnlyList<Role>> GetAllAsync(CancellationToken ct = default);
+    /// <summary>EXEC RolesGetAll_V2 - the same rows, searched/sorted/paged in SQL (database/v2/011).</summary>
+    Task<PagedResult<Role>> GetPageAsync(PagedRequest paging, CancellationToken ct = default);
     Task<Role?> GetByIdAsync(long roleId, CancellationToken ct = default);
     Task SaveAsync(RoleUpsert role, CancellationToken ct = default);
     /// <summary>ActionIds currently granted to the role.</summary>
@@ -57,7 +60,7 @@ public interface IRoleRepository
 
 public interface IRoleService
 {
-    Task<IReadOnlyList<Role>> GetAllAsync(CancellationToken ct = default);
+    Task<PagedResult<Role>> GetAllAsync(PagedRequest paging, CancellationToken ct = default);
     Task<Role> UpsertAsync(RoleUpsert request, CancellationToken ct = default);
     Task<IReadOnlyList<RolePermissionNode>> GetPermissionsAsync(long roleId, CancellationToken ct = default);
     Task<IReadOnlyList<RolePermissionNode>> SetPermissionsAsync(long roleId, SetRolePermissionsRequest request, CancellationToken ct = default);
@@ -71,8 +74,8 @@ public sealed class RoleService(
     ICurrentUser actor,
     IValidator<RoleUpsert> roleValidator) : IRoleService
 {
-    public async Task<IReadOnlyList<Role>> GetAllAsync(CancellationToken ct = default) =>
-        (await roles.GetAllAsync(ct)).Where(r => r.IsDeleted != true).ToList();
+    public Task<PagedResult<Role>> GetAllAsync(PagedRequest paging, CancellationToken ct = default) =>
+        roles.GetPageAsync(paging, ct);
 
     public async Task<Role> UpsertAsync(RoleUpsert request, CancellationToken ct = default)
     {

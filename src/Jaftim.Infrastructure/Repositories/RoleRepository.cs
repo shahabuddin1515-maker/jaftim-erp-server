@@ -1,4 +1,5 @@
 using System.Data;
+using Jaftim.Application.Common;
 using Jaftim.Application.Modules.Users;
 using Jaftim.Domain.Entities.Users;
 using Jaftim.Infrastructure.Data;
@@ -10,6 +11,9 @@ public sealed class RoleRepository(IDbExecutor db) : IRoleRepository
 {
     public Task<IReadOnlyList<Role>> GetAllAsync(CancellationToken ct = default) =>
         db.QueryAsync<Role>(SpCall.Procedure("RolesGetAll"), ct);
+
+    public Task<PagedResult<Role>> GetPageAsync(PagedRequest paging, CancellationToken ct = default) =>
+        db.QueryPagedAsync<Role>(SpCall.Procedure("RolesGetAll_V2"), paging, ct);
 
     public Task<Role?> GetByIdAsync(long roleId, CancellationToken ct = default) =>
         db.QueryFirstOrDefaultAsync<Role>(SpCall.Procedure("RoleGetById").With("@RoleId", roleId), ct);

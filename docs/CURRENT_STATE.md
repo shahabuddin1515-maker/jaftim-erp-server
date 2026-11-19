@@ -27,7 +27,8 @@ No task is mid-edit. The tree is at a clean checkpoint.
   140 tests pass; `_V2` id sets equal the legacy procedures' for callers of every role branch (29 cases x 2 tenants,
   harness was a scratch script); live API run on :5150 as super admin covered paging, search, sort, `userTypeId`,
   size clamp and past-the-end. **Not exercised live:** `/api/tagging/me/*` (super admin lacks 907; same repository
-  path as `agents/{id}/*`, which was).
+  path as `agents/{id}/*`, which was). Follow-up same day (owner: "yes"): `GET /api/roles` (`v2/011`) and
+  `GET /api/tenants` (`catalog/003`) paged the same way, applied locally, role ids equal legacy, live run OK.
 - **Permission keys** (2026-11-18, new in v2): anonymous `GET /api/permissions/keys` - every `RoleAction` as
   KEY -> ActionId, read live (`PermissionKeyService`; the first, hard-coded version was replaced at the owner's request).
   `dotnet build` clean, 139 tests pass; live run on :5120 returned all 165 rows, `?tenantCode=acme` 200, unknown 404. Same day: pinned the transitive
@@ -102,8 +103,8 @@ No blockers. Owed by the owner/product, not blocking:
 1. **Release step for `v2/007`, `v2/008`, `v2/009`** (`008`/`009` only for the region endpoints): every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
    **before** this build is deployed there (without it notifications are logged as unqueueable and lost), and the API
    App Service needs `ConnectionStrings:Hangfire` (it now runs a Hangfire server). Live alone sets
-   `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010` is now required too**:
-   without it `GET /api/users` and every tagging list fail (procedure not found).
+   `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010`, `v2/011` and `catalog/003` are now required
+   too**: without them `GET /api/users`, every tagging list, `GET /api/roles` and `GET /api/tenants` fail.
 2. 12 roles have zero `RoleActionMapping` rows (query in `docs/DATABASE.md`).
 3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
 

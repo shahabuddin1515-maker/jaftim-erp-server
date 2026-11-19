@@ -9,6 +9,7 @@ audit trail. **No business data lives here.**
 |---|---|
 | `001_Catalog_Schema.sql` | tables + `Catalog_*` procedures; idempotent |
 | `002_Seed_From_Tenant.md` | how accounts are seeded from each tenant `AspNetUsers` (done by the `AccountSyncJob`, not by T-SQL, because Azure SQL has no cross-database queries) |
+| `003_Tenant_GetPage.sql` | `Catalog_Tenant_GetPage` - the paged admin tenant list (`GET /api/tenants`); never returns connection strings; idempotent |
 
 Local: `jaftim-local-catalog`. Register the local tenant after applying `001`:
 

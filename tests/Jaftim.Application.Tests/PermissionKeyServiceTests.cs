@@ -75,6 +75,7 @@ public sealed class PermissionKeyServiceTests
         ];
 
         public Task<IReadOnlyList<Tenant>> GetAllAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<Tenant>>(All);
+        public Task<Jaftim.Application.Common.PagedResult<TenantSummary>> GetPageAsync(Jaftim.Application.Common.PagedRequest paging, CancellationToken ct = default) => Task.FromResult(Jaftim.Application.Common.PagedResult<TenantSummary>.Empty(paging));
         public Task<Tenant?> GetByCodeAsync(string code, CancellationToken ct = default) =>
             Task.FromResult(All.FirstOrDefault(t => t.Code.Equals(code, StringComparison.OrdinalIgnoreCase)));
     }
