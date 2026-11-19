@@ -34,6 +34,29 @@ public sealed class SwaggerTests(ApiSmokeTests.Factory factory) : IClassFixture<
         Assert.Contains("tenantCode", login.GetProperty("summary").GetString());     // XML summary made it in
     }
 
+    /// <summary>
+    /// Every public property of PagedRequest becomes a query parameter in the document, so a computed helper there
+    /// (the old Skip) shows up as a field clients can fill in but the server ignores.
+    /// </summary>
+    [Theory]
+    [InlineData("/api/users", "UserTypeId")]
+    [InlineData("/api/roles", null)]
+    [InlineData("/api/tenants", null)]
+    [InlineData("/api/tagging/available-customers", null)]
+    [InlineData("/api/stocks", null)]
+    public async Task Paged_lists_expose_exactly_the_paging_contract(string path, string? extra)
+    {
+        HttpClient client = factory.CreateClient();
+        using JsonDocument doc = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
+
+        HashSet<string> names = doc.RootElement.GetProperty("paths").GetProperty(path).GetProperty("get")
+            .GetProperty("parameters").EnumerateArray().Select(p => p.GetProperty("name").GetString()!).ToHashSet();
+
+        Assert.Superset(new HashSet<string> { "Page", "PageSize", "Search", "SortBy", "SortDescending" }, names);
+        Assert.DoesNotContain("Skip", names);
+        if (extra is not null) Assert.Contains(extra, names);
+    }
+
     [Fact]
     public async Task Swagger_ui_and_scalar_are_served_in_development()
     {

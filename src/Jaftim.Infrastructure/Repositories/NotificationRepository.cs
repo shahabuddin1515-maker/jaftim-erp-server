@@ -22,7 +22,7 @@ public sealed class NotificationRepository(IDbExecutor db) : INotificationReposi
             SpCall.Procedure("Notification_GetByUser")
                 .With("@UserId", userProfileId)
                 .With("@OnlyUnread", onlyUnread)
-                .With("@Skip", paging.Skip)
+                .With("@Skip", paging.Offset())
                 .With("@Take", paging.PageSize),
             async grid =>
             {

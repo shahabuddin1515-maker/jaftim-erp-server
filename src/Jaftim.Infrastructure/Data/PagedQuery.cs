@@ -11,6 +11,9 @@ namespace Jaftim.Infrastructure.Data;
 /// </summary>
 public static class PagedQuery
 {
+    /// <summary>Row offset for the older procedures that take @Skip/@Take (AuditLog_GetByEntity, Notification_GetByUser).</summary>
+    public static int Offset(this PagedRequest request) => (Math.Max(request.Page, 1) - 1) * request.PageSize;
+
     public static SpCall WithPaging(this SpCall call, PagedRequest request) =>
         call.With("@Search", request.Search, DbType.String, 200)
             .With("@SortBy", request.SortBy, DbType.String, 50)

@@ -46,6 +46,9 @@ from it for extra filters: `[FromQuery] UserListRequest request`). Never return 
 - **Verify** the `_V2` against the legacy procedure: same id set (all pages, no search) for a caller of every
   visibility branch, before the endpoint is called done.
 - Document the search columns and the `SortBy` keys in the action's `/// <summary>` (that is the Swagger text).
+- Every public property of a request bound `[FromQuery]` shows up in Swagger as a query parameter, computed ones
+  included. Keep derived values out of `PagedRequest` and its subclasses. The `@Skip` offset for the older
+  `@Skip/@Take` procedures is `paging.Offset()` in `PagedQuery`. `SwaggerTests` checks this.
 
 Not paged: dropdown/lookup sources (`/api/lookups`), menus and permission trees (edited as a whole), a single
 record's tabs (stock sections/flags/notes/files, a customer's inquiries and interactions), edit forms (a user's

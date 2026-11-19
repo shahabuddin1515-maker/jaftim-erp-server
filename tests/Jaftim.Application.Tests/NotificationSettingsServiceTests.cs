@@ -1,5 +1,6 @@
 using Jaftim.Application.Abstractions;
 using Jaftim.Application.Common;
+using Jaftim.Infrastructure.Data;
 using Jaftim.Application.Modules.Notifications;
 using Jaftim.Domain.Entities.Notifications;
 using Jaftim.Domain.Exceptions;
@@ -173,8 +174,17 @@ public sealed class NotificationInboxServiceTests
         Assert.All(repo.UserIds, id => Assert.Equal(77, id));
         Assert.Equal(5, repo.UserIds.Count);
         Assert.True(repo.LastOnlyUnread);
-        Assert.Equal(20, repo.LastSkip);   // page 2 of 20
+        Assert.Equal(20, repo.LastPaging!.Offset());   // page 2 of 20
     }
+
+    [Theory]
+    [InlineData(1, 10, 0)]
+    [InlineData(3, 10, 20)]
+    [InlineData(0, 10, 0)]      // page below 1 is treated as page 1
+    [InlineData(-5, 25, 0)]
+    [InlineData(2, 1000, 200)]  // page size is clamped to 200 before the offset is computed
+    public void Offset_turns_page_and_size_into_a_row_offset(int page, int pageSize, int expected) =>
+        Assert.Equal(expected, new PagedRequest { Page = page, PageSize = pageSize }.Offset());
 
     private sealed class InboxActor(long id) : ICurrentUser
     {
@@ -186,12 +196,12 @@ public sealed class NotificationInboxServiceTests
     {
         public List<long> UserIds { get; } = [];
         public bool LastOnlyUnread { get; private set; }
-        public int LastSkip { get; private set; }
+        public PagedRequest? LastPaging { get; private set; }
 
         public Task<NotificationSummary> GetSummaryAsync(long userProfileId, CancellationToken ct = default) { UserIds.Add(userProfileId); return Task.FromResult(new NotificationSummary(0, 0)); }
         public Task<PagedResult<NotificationListItem>> GetByUserAsync(long userProfileId, bool onlyUnread, PagedRequest paging, CancellationToken ct = default)
         {
-            UserIds.Add(userProfileId); LastOnlyUnread = onlyUnread; LastSkip = paging.Skip;
+            UserIds.Add(userProfileId); LastOnlyUnread = onlyUnread; LastPaging = paging;
             return Task.FromResult(PagedResult<NotificationListItem>.Empty(paging));
         }
         public Task MarkAllSeenAsync(long userProfileId, CancellationToken ct = default) { UserIds.Add(userProfileId); return Task.CompletedTask; }

@@ -34,7 +34,7 @@ public sealed class AuditLogRepository(IDbExecutor db) : IAuditLogRepository
             SpCall.Procedure("AuditLog_GetByEntity")
                 .With("@EntityType", entityType, DbType.String, 100)
                 .With("@EntityId", entityId)
-                .With("@Skip", paging.Skip)
+                .With("@Skip", paging.Offset())
                 .With("@Take", paging.PageSize)
                 .WithoutAudit(),
             async grid =>

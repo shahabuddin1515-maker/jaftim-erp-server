@@ -11,8 +11,8 @@ public record PagedRequest
     public string? Search { get; init; }
     public string? SortBy { get; init; }
     public bool SortDescending { get; init; }
-
-    public int Skip => (Math.Max(Page, 1) - 1) * PageSize;
+    // No computed members here: every public property is listed by Swagger as a query parameter. The row offset for
+    // @Skip-style procedures is PagedQuery.Offset() in Infrastructure.
 }
 
 /// <summary>Standard paged output. The API serialises this as-is inside the response envelope.</summary>
