@@ -72,6 +72,22 @@ public sealed class SwaggerTests(ApiSmokeTests.Factory factory) : IClassFixture<
     }
 
     [Fact]
+    public async Task Scoped_lookup_takes_only_the_table_so_the_scope_cannot_come_from_the_client()
+    {
+        HttpClient client = factory.CreateClient();
+        using JsonDocument doc = JsonDocument.Parse(await client.GetStringAsync("/swagger/v1/swagger.json"));
+
+        JsonElement get = doc.RootElement.GetProperty("paths").GetProperty("/api/lookups/scoped/{table}").GetProperty("get");
+        Assert.Contains("AuthTable", get.GetProperty("description").GetString());
+        Assert.True(get.GetProperty("responses").TryGetProperty("403", out _));
+        JsonElement parameter = Assert.Single(get.GetProperty("parameters").EnumerateArray());
+        Assert.Equal("table", parameter.GetProperty("name").GetString());
+        Assert.Equal("path", parameter.GetProperty("in").GetString());
+
+        Assert.Equal(HttpStatusCode.Unauthorized, (await client.GetAsync("/api/lookups/scoped/SalesPerson_View")).StatusCode);
+    }
+
+    [Fact]
     public async Task Swagger_ui_and_scalar_are_served_in_development()
     {
         HttpClient client = factory.CreateClient();

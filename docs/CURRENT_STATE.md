@@ -1,6 +1,6 @@
 # Current Development State
 
-Last updated: 2026-11-19 (server-side paging for list endpoints)
+Last updated: 2026-11-20 (caller-scoped lookup endpoint)
 
 > Handoff only. This file is **not** authoritative over code, tests, the database or the other docs - if it
 > disagrees with them, they win and this file is stale. Permanent knowledge belongs in the documents listed in
@@ -20,6 +20,14 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **`GET /api/lookups/scoped/{table}`** (2026-11-20): one dropdown source scoped to the caller (Team Lead Sales sees
+  their reporting subtree in `SalesPerson_View`). The owner asked for a `roleId` parameter; it was implemented from
+  the token instead, because a client-supplied role could be omitted to see everything (`docs/AUTH.md`). New
+  `database/v2/014_Lookup_Scoped.sql` (both local tenants). Verified: build clean (in a scratchpad copy; the owner's
+  VS session held the DLLs), 163 tests pass; id sets equal legacy for all staff callers x all sources; live on :5150
+  as 12475 (5 rows), 12459 (39), 1 (40); unknown table 404, anonymous 401, `?roleId=` ignored. Side effect: local
+  password `LocalTest1234` set for user 12475. Found: a `ReportsTo_UserId` cycle 12259 <-> 12475
+  that breaks `fn_GetUserChildProfiles` (`docs/REWRITE_PLAN.md` section 7).
 - **`GET /api/lookups/office-locations`** (2026-11-19): `database/v2/013_Lookup_OfficeLocations.sql` (both local
   tenants). Verified: build clean, 157 tests pass; live on :5150 returns 9/85/185/186, anonymous 401.
 - **Editable username on `POST`/`PUT /api/users`** (2026-11-19): new `database/v2/012_UserSave_V2.sql` (applied to
@@ -113,12 +121,16 @@ No blockers. Owed by the owner/product, not blocking:
 1. **Release step for `v2/007`, `v2/008`, `v2/009`** (`008`/`009` only for the region endpoints): every notification now goes through `NotificationOutbox`, so UAT/Live need `007`
    **before** this build is deployed there (without it notifications are logged as unqueueable and lost), and the API
    App Service needs `ConnectionStrings:Hangfire` (it now runs a Hangfire server). Live alone sets
-   `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010`-`v2/013` and `catalog/003` are now
+   `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010`-`v2/014` and `catalog/003` are now
    required too**: without them `GET /api/users`, every tagging list, `GET /api/roles`, `GET /api/tenants`,
-   `POST`/`PUT /api/users` and `GET /api/lookups/office-locations` fail.
+   `POST`/`PUT /api/users`, `GET /api/lookups/office-locations` and `GET /api/lookups/scoped/{table}` fail.
 2. 12 roles have zero `RoleActionMapping` rows (query in `docs/DATABASE.md`).
 3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
-4. Office-location id spaces: the new lookup returns `Base_Country` ids, the stored `OfficeLocation_CountryId` is
+4. **Reporting-line cycle** 12259 <-> 12475: `UserGetAll`, tagging and inquiry lists error for those callers. Fix the
+   two rows on UAT/Live (owner) and decide whether saving a user should reject a cycle.
+5. Which other screens should switch to the scoped lookup (and whether `Customer_View` should follow the team tree
+   for Team Leads / CSD Manager, as `GetInquiryAll` does for role 12) is a product call.
+6. Office-location id spaces: the new lookup returns `Base_Country` ids, the stored `OfficeLocation_CountryId` is
    `Base_OriginCountry` ids. Whether to migrate the column is an owner decision (`docs/USERS.md` "Office location").
 
 ## Next Actions

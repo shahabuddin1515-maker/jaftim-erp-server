@@ -18,6 +18,11 @@ public sealed class LookupRepository(IDbExecutor db, IMemoryCache cache) : ILook
     public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
         db.QueryAsync<OfficeLocation>(SpCall.Procedure("Lookup_OfficeLocations"), ct);
 
+    public Task<IReadOnlyList<LookupItem>> GetScopedValuesAsync(string tableName, CancellationToken ct = default) =>
+        db.QueryAsync<LookupItem>(
+            SpCall.Procedure("Lookup_GetScoped")
+                .With("@TableName", tableName, DbType.String), ct);
+
     public async Task<IReadOnlySet<string>> GetAllowedTableNamesAsync(CancellationToken ct = default)
     {
         IReadOnlySet<string>? cached = await cache.GetOrCreateAsync(AllowedTablesCacheKey, async entry =>

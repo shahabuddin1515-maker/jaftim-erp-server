@@ -17,18 +17,39 @@ public interface ILookupRepository
 
     /// <summary>EXEC Lookup_OfficeLocations (database/v2/013) - Base_Country rows with IsLocationCountry = 1.</summary>
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// EXEC Lookup_GetScoped @TableName (database/v2/014) - one whitelisted source, scoped to the caller (@CreatedBy)
+    /// by their primary role: SalesPerson_View to their reporting subtree, Customer_View to an agent's tagged customers.
+    /// </summary>
+    Task<IReadOnlyList<LookupItem>> GetScopedValuesAsync(string tableName, CancellationToken ct = default);
 }
 
 public interface ILookupService
 {
     Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default);
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, CancellationToken ct = default);
 }
 
 public sealed class LookupService(ILookupRepository repository) : ILookupService
 {
     public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
         repository.GetOfficeLocationsAsync(ct);
+
+    /// <summary>
+    /// The caller's view of one dropdown source. The scope comes from the caller's identity inside the procedure,
+    /// never from the request, so it cannot be widened by leaving a parameter out. Unknown source -> 404.
+    /// </summary>
+    public async Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, CancellationToken ct = default)
+    {
+        string name = tableName?.Trim() ?? string.Empty;
+        IReadOnlySet<string> allowed = await repository.GetAllowedTableNamesAsync(ct);
+        if (name.Length == 0 || !allowed.Contains(name))
+            throw new NotFoundException("Lookup table", name);
+
+        return await repository.GetScopedValuesAsync(name, ct);
+    }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default)
     {

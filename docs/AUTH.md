@@ -78,6 +78,9 @@ the user's permission cache and writes `AuditLog` (`UserRole.Assigned/Revoked`, 
 - Fallback policy: authenticated. `[AllowAnonymous]` is explicit and rare.
 - `[HasPermission(Permissions.X)]` -> `PermissionHandler` -> `CachedPermissionService.HasPermissionAsync(uid, actionId)`.
 - Row-level scoping stays inside the procedures, keyed on `@CreatedBy` and the primary role.
+  Never take the scope from the request (a `roleId`/`userId` that narrows what the caller sees): omitting or forging
+  it would widen the result. The caller is already `@CreatedBy`. Example: `GET /api/lookups/scoped/{table}` (owner asked
+  for a `roleId` parameter, 2026-11-20; implemented from the token instead).
 - After saving role rights call `IPermissionService.InvalidateRole`; after deactivating a user call
   `IAuthRepository.BumpTokenVersionAsync` and `TokenVersionValidator.Invalidate`.
 
