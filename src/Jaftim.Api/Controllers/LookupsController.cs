@@ -38,8 +38,10 @@ public sealed class LookupsController(ILookupService lookups) : ApiControllerBas
     /// the caller's token (primary role + reporting line), never from the request:
     /// <list type="bullet">
     /// <item><c>SalesPerson_View</c>: Super Admin every row; System Admin every row outside user types 1/7; anyone
-    /// else themself and the people who report to them, directly or not (e.g. a Team Lead Sales sees their team).</item>
-    /// <item><c>Customer_View</c>: a Sales Executive only the customers tagged to them; anyone else every row.</item>
+    /// else only the people who report to them, directly or not, and not themself (a Team Lead Sales sees their team;
+    /// someone with nobody under them gets an empty list).</item>
+    /// <item><c>Customer_View</c>: a Sales Executive only the customers tagged to them; a CSD Manager or Team Lead
+    /// Sales the customers tagged to them or anyone under them; anyone else every row.</item>
     /// <item>Every other source: every row, the same as <c>GET /api/lookups</c>.</item>
     /// </list>
     /// Unknown source -> 404. Not paged (a dropdown source).

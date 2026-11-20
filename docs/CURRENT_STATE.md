@@ -28,6 +28,9 @@ No task is mid-edit. The tree is at a clean checkpoint.
   as 12475 (5 rows), 12459 (39), 1 (40); unknown table 404, anonymous 401, `?roleId=` ignored. Side effect: local
   password `LocalTest1234` set for user 12475. Found: a `ReportsTo_UserId` cycle 12259 <-> 12475
   that breaks `fn_GetUserChildProfiles` (`docs/REWRITE_PLAN.md` section 7).
+  **Revised same day (owner):** non-admins no longer see themselves (nobody below = empty list); `Customer_View` for
+  roles 12/18 = customers tagged to them or their subtree. Re-verified in SQL for every staff caller; build clean,
+  163 tests pass; the revised version was **not** re-run through the live API (C# unchanged apart from docs text).
 - **`GET /api/lookups/office-locations`** (2026-11-19): `database/v2/013_Lookup_OfficeLocations.sql` (both local
   tenants). Verified: build clean, 157 tests pass; live on :5150 returns 9/85/185/186, anonymous 401.
 - **Editable username on `POST`/`PUT /api/users`** (2026-11-19): new `database/v2/012_UserSave_V2.sql` (applied to
@@ -128,13 +131,15 @@ No blockers. Owed by the owner/product, not blocking:
 3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
 4. **Reporting-line cycle** 12259 <-> 12475: `UserGetAll`, tagging and inquiry lists error for those callers. Fix the
    two rows on UAT/Live (owner) and decide whether saving a user should reject a cycle.
-5. Which other screens should switch to the scoped lookup (and whether `Customer_View` should follow the team tree
-   for Team Leads / CSD Manager, as `GetInquiryAll` does for role 12) is a product call.
+5. Which other screens should switch to the scoped lookup is a frontend/product call.
 6. Office-location id spaces: the new lookup returns `Base_Country` ids, the stored `OfficeLocation_CountryId` is
    `Base_OriginCountry` ids. Whether to migrate the column is an owner decision (`docs/USERS.md` "Office location").
 
 ## Next Actions
 
+0. **Apply `database/v2/014_Lookup_Scoped.sql` to UAT** (owner authorised 2026-11-20; it depends only on legacy
+   objects). Blocked on credentials: none are configured for this repo. Run it with `sqlcmd -I -b`, then verify with
+   `OBJECT_DEFINITION(OBJECT_ID('dbo.Lookup_GetScoped'))` and check UAT for the 12259/12475 cycle.
 1. **Port bulk inquiry import** (`InquiryController.BulkInquirySave`) as a Hangfire job over `BulkInquiryImport_V2`
    (TVP) with progress, written the pipeline way (`IJobRunner`; notify through `INotificationDispatcher`). Start by
    reading the legacy action, the procedure and its table type, and how the legacy screen reports per-row errors.
