@@ -34,8 +34,9 @@ public sealed class LookupsController(ILookupService lookups) : ApiControllerBas
 
     /// <summary>
     /// GET /api/lookups/scoped/SalesPerson_View - one dropdown source (any name the plain lookup accepts) filtered to
-    /// what the signed-in user may see, as <c>[{ tableName, id, value }]</c> sorted by value. The scope is taken from
-    /// the caller's token (primary role + reporting line), never from the request:
+    /// the signed-in user, as <c>[{ tableName, id, value }]</c> sorted by value. The rules below use <c>roleId</c> when
+    /// it is sent (optional, e.g. stock save loading a list for a given role), otherwise the caller's own role from the
+    /// token; "below them" always means below the signed-in user:
     /// <list type="bullet">
     /// <item><c>SalesPerson_View</c>: Super Admin every row; System Admin every row outside user types 1/7; anyone
     /// else only the people who report to them, directly or not, and not themself (a Team Lead Sales sees their team;
@@ -44,10 +45,10 @@ public sealed class LookupsController(ILookupService lookups) : ApiControllerBas
     /// Sales the customers tagged to them or anyone under them; anyone else every row.</item>
     /// <item>Every other source: every row, the same as <c>GET /api/lookups</c>.</item>
     /// </list>
-    /// Unknown source -> 404. Not paged (a dropdown source).
+    /// Unknown source -> 404; <c>roleId</c> of 0 or less -> 422. Not paged (a dropdown source).
     /// </summary>
     [HttpGet("scoped/{table}")]
     [HasPermission(Permissions.AuthTable)]
-    public async Task<ActionResult<ApiResponse<IReadOnlyList<LookupItem>>>> GetScoped(string table, CancellationToken ct) =>
-        Ok(await lookups.GetScopedAsync(table, ct));
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<LookupItem>>>> GetScoped(string table, [FromQuery] long? roleId, CancellationToken ct) =>
+        Ok(await lookups.GetScopedAsync(table, roleId, ct));
 }

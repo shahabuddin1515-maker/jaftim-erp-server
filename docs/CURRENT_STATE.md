@@ -30,7 +30,10 @@ No task is mid-edit. The tree is at a clean checkpoint.
   that breaks `fn_GetUserChildProfiles` (`docs/REWRITE_PLAN.md` section 7).
   **Revised same day (owner):** non-admins no longer see themselves (nobody below = empty list); `Customer_View` for
   roles 12/18 = customers tagged to them or their subtree. Re-verified in SQL for every staff caller; build clean,
-  163 tests pass; the revised version was **not** re-run through the live API (C# unchanged apart from docs text).
+  163 tests pass. **Then (owner):** optional `?roleId=` that replaces the token's role in the rules (stock save loads
+  a list for a role); not a security boundary, see `docs/AUTH.md`. Verified: default path unchanged for every staff
+  caller, override cases in SQL, build clean, 166 tests pass; live on :5150 as 12475 - no roleId 4, `roleId=1` 40,
+  `roleId=10` 39, `Customer_View` 31 vs 270, `roleId=0` 422, `roleId=abc` 400.
 - **`GET /api/lookups/office-locations`** (2026-11-19): `database/v2/013_Lookup_OfficeLocations.sql` (both local
   tenants). Verified: build clean, 157 tests pass; live on :5150 returns 9/85/185/186, anonymous 401.
 - **Editable username on `POST`/`PUT /api/users`** (2026-11-19): new `database/v2/012_UserSave_V2.sql` (applied to

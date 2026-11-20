@@ -19,17 +19,17 @@ public interface ILookupRepository
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
 
     /// <summary>
-    /// EXEC Lookup_GetScoped @TableName (database/v2/014) - one whitelisted source, scoped to the caller (@CreatedBy)
-    /// by their primary role: SalesPerson_View to their reporting subtree, Customer_View to an agent's tagged customers.
+    /// EXEC Lookup_GetScoped @TableName, @RoleId (database/v2/014) - one whitelisted source, scoped to the caller
+    /// (@CreatedBy) by <paramref name="roleId"/> when given, else by the caller's primary role.
     /// </summary>
-    Task<IReadOnlyList<LookupItem>> GetScopedValuesAsync(string tableName, CancellationToken ct = default);
+    Task<IReadOnlyList<LookupItem>> GetScopedValuesAsync(string tableName, long? roleId, CancellationToken ct = default);
 }
 
 public interface ILookupService
 {
     Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default);
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
-    Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, CancellationToken ct = default);
+    Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, long? roleId = null, CancellationToken ct = default);
 }
 
 public sealed class LookupService(ILookupRepository repository) : ILookupService
@@ -38,17 +38,21 @@ public sealed class LookupService(ILookupRepository repository) : ILookupService
         repository.GetOfficeLocationsAsync(ct);
 
     /// <summary>
-    /// The caller's view of one dropdown source. The scope comes from the caller's identity inside the procedure,
-    /// never from the request, so it cannot be widened by leaving a parameter out. Unknown source -> 404.
+    /// The caller's view of one dropdown source. The rules use <paramref name="roleId"/> when the screen sends one
+    /// (e.g. stock save loading a list for a role), otherwise the caller's own role; the reporting subtree is always
+    /// the caller's. Not a security boundary: GET /api/lookups returns the same rows unscoped. Unknown source -> 404.
     /// </summary>
-    public async Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, CancellationToken ct = default)
+    public async Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, long? roleId = null, CancellationToken ct = default)
     {
+        if (roleId is <= 0)
+            throw new BusinessRuleException("roleId must be a positive role id.");
+
         string name = tableName?.Trim() ?? string.Empty;
         IReadOnlySet<string> allowed = await repository.GetAllowedTableNamesAsync(ct);
         if (name.Length == 0 || !allowed.Contains(name))
             throw new NotFoundException("Lookup table", name);
 
-        return await repository.GetScopedValuesAsync(name, ct);
+        return await repository.GetScopedValuesAsync(name, roleId, ct);
     }
 
     public async Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default)

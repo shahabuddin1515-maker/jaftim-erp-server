@@ -6,9 +6,10 @@ GO
     014_Lookup_Scoped.sql - GET /api/lookups/scoped/{table}.
 
     One dropdown source from the SYS_DropDownsWithAuth whitelist, scoped to the CALLER. The caller is @CreatedBy
-    (injected by IDbExecutor from the token) and the scoping uses their primary UserProfile.RoleId, like every other
-    procedure (docs/AUTH.md). The role is deliberately NOT a parameter: a client-supplied role could be omitted or
-    forged to see everything.
+    (injected by IDbExecutor from the token); the rules below use @RoleId when the request sends one, otherwise the
+    caller's primary UserProfile.RoleId (owner, 2026-11-20: screens such as stock save load a list for a given role).
+    The reporting subtree is always the caller's own. @RoleId is not a security boundary: GET /api/lookups returns
+    every row of these sources under the same permission (docs/AUTH.md).
 
     Rules per source:
       SalesPerson_View  the UserGetAll_V2 visibility (database/v2/010): RoleId 1 sees every row, RoleId 10 every row
@@ -29,6 +30,7 @@ GO
 */
 CREATE OR ALTER PROCEDURE dbo.Lookup_GetScoped
     @TableName NVARCHAR(128),
+    @RoleId    BIGINT   = NULL,
     @CreatedBy BIGINT   = NULL,
     @CreatedAt DATETIME = NULL,
     @CompanyId BIGINT   = NULL
@@ -49,7 +51,7 @@ BEGIN
         RETURN;
     END
 
-    DECLARE @CallerRoleId BIGINT = (SELECT RoleId FROM dbo.UserProfile WHERE UserProfileId = @CreatedBy);
+    DECLARE @CallerRoleId BIGINT = COALESCE(@RoleId, (SELECT RoleId FROM dbo.UserProfile WHERE UserProfileId = @CreatedBy));
 
     -- The caller's reporting subtree, caller included: the same set as fn_GetUserChildProfiles(@CreatedBy), but
     -- walked iteratively so a ReportsTo_UserId cycle ends the walk instead of failing with "maximum recursion
