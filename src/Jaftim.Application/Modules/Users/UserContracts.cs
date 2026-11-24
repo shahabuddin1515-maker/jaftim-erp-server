@@ -50,11 +50,21 @@ public sealed class UserListItem
     public string? SecondaryPhone { get; set; }
     public string? WhatsAppNumber { get; set; }
     public string? CustomerTagLimit { get; set; }
+    /// <summary>Base_CountryCodes id of <see cref="Phone"/>, and its dial text (e.g. "+92").</summary>
+    public long? PhoneCountryCodeId { get; set; }
+    public string? PhoneCountryCode { get; set; }
+    /// <summary>Base_CountryCodes id of <see cref="WhatsAppNumber"/>, and its dial text.</summary>
+    public long? WhatsAppCountryCodeId { get; set; }
+    public string? WhatsAppCountryCode { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
 }
 
-/// <summary>UserGetById row (edit form).</summary>
+/// <summary>
+/// UserGetById_V2 row (edit form). Phone and WhatsApp are each a number (digits, no country code) plus a
+/// Base_CountryCodes id and its dial text. <see cref="CountryCode"/> is the legacy UserProfile column, unrelated to
+/// either number and never filled by the legacy form.
+/// </summary>
 public sealed class UserDetail
 {
     public long UserProfileId { get; set; }
@@ -77,6 +87,11 @@ public sealed class UserDetail
     public bool? RemoteAccessAllowed { get; set; }
     public long? OfficeLocation_CountryId { get; set; }
     public string? WhatsAppNumber { get; set; }
+    public long? WhatsAppCountryCodeId { get; set; }
+    public string? WhatsAppCountryCode { get; set; }
+    public string? Phone { get; set; }
+    public long? PhoneCountryCodeId { get; set; }
+    public string? PhoneCountryCode { get; set; }
     public string? CustomerTagLimit { get; set; }
     public DateTime? CreatedAt { get; set; }
     public DateTime? ModifiedAt { get; set; }
@@ -90,6 +105,8 @@ public sealed class UserDetail
 /// Username is the legacy form's "Username" field - a display name, not a login identity (sign-in is by e-mail).
 /// Optional: on create it defaults to the e-mail; on update an omitted value keeps the stored one. A username used by
 /// another user is a 409 (InquirySave matches existing parties by username, so a clash could misattribute an inquiry).
+/// Phone and WhatsAppNumber are the number only (digits); the country code goes separately as a Base_CountryCodes id
+/// (GET /api/lookups?tables=vw_CountryDialCode). A number and its code come together or not at all.
 /// </summary>
 public sealed record UserUpsertRequest(
     string FullName,
@@ -109,7 +126,10 @@ public sealed record UserUpsertRequest(
     string? WhatsAppNumber = null,
     int? CustomerTagLimit = null,
     bool RemoteAccessAllowed = false,
-    string? Username = null);
+    string? Username = null,
+    long? WhatsAppCountryCodeId = null,
+    string? Phone = null,
+    long? PhoneCountryCodeId = null);
 
 /// <summary>
 /// POST /api/users result. Username is the value stored - the one sent, trimmed, or the e-mail when none was sent.
@@ -132,9 +152,22 @@ public sealed class UserUpsertRequestValidator : AbstractValidator<UserUpsertReq
             .MaximumLength(256).When(x => x.Username is not null);
         RuleFor(x => x.Code).MaximumLength(50);
         RuleFor(x => x.CountryCode).MaximumLength(10);
-        RuleFor(x => x.WhatsAppNumber).MaximumLength(200);
+        RuleFor(x => x.Phone).Matches(NumberPattern).WithMessage(NumberMessage("phone")).When(x => x.Phone is not null);
+        RuleFor(x => x.WhatsAppNumber).Matches(NumberPattern).WithMessage(NumberMessage("whatsAppNumber")).When(x => x.WhatsAppNumber is not null);
+        RuleFor(x => x.PhoneCountryCodeId).NotNull().WithMessage("phoneCountryCodeId is required with phone.").When(x => x.Phone is not null);
+        RuleFor(x => x.Phone).NotNull().WithMessage("phone is required with phoneCountryCodeId.").When(x => x.PhoneCountryCodeId is not null);
+        RuleFor(x => x.WhatsAppCountryCodeId).NotNull().WithMessage("whatsAppCountryCodeId is required with whatsAppNumber.").When(x => x.WhatsAppNumber is not null);
+        RuleFor(x => x.WhatsAppNumber).NotNull().WithMessage("whatsAppNumber is required with whatsAppCountryCodeId.").When(x => x.WhatsAppCountryCodeId is not null);
+        RuleFor(x => x.PhoneCountryCodeId).GreaterThan(0).When(x => x.PhoneCountryCodeId is not null);
+        RuleFor(x => x.WhatsAppCountryCodeId).GreaterThan(0).When(x => x.WhatsAppCountryCodeId is not null);
         RuleFor(x => x.CustomerTagLimit).GreaterThanOrEqualTo(0).When(x => x.CustomerTagLimit is not null);
     }
+
+    /// <summary>The national number only: 4-15 digits (E.164 caps a full number at 15), surrounding spaces allowed.</summary>
+    private const string NumberPattern = @"^\s*\d{4,15}\s*$";
+
+    private static string NumberMessage(string field) =>
+        $"{field} must be 4-15 digits, without the country code (send that as the matching country code id).";
 }
 
 /// <summary>The parameter set of EXEC UserSave, copied verbatim from the legacy UserRepository.UserSave.</summary>
@@ -157,7 +190,10 @@ public sealed record UserSaveArgs(
     long? ReportsToUserId,
     long? OfficeLocationCountryId,
     string? OfficialWhatsapp,
-    bool RemoteAccessAllowed);
+    bool RemoteAccessAllowed,
+    string? Phone = null,
+    long? PhoneCountryCodeId = null,
+    long? WhatsAppCountryCodeId = null);
 
 public interface IUserService
 {
@@ -201,6 +237,7 @@ public sealed class UserService(
         if (string.IsNullOrWhiteSpace(request.Email))
             throw new BusinessRuleException("email is required to create a user.");
         await EnsureStaffRoleAsync(request.RoleId, ct);
+        await EnsureCountryCodesExistAsync(request, ct);
 
         string email = request.Email.Trim();
         if (await users.GetByEmailAsync(email, ct) is not null)
@@ -247,6 +284,7 @@ public sealed class UserService(
         await EnsureStaffRoleAsync(request.RoleId, ct);
         if (before.RoleId == RoleIds.Customer)
             throw new BusinessRuleException("Customer profiles are managed through the customer endpoints.");
+        await EnsureCountryCodesExistAsync(request, ct);
 
         // Username is editable (UserSave_V2 writes it on update; legacy UserSave dropped it). Only a changed value is
         // checked for clashes, so the few legacy duplicates can still be re-saved unchanged.
@@ -290,6 +328,14 @@ public sealed class UserService(
             throw new BusinessRuleException("The Customer role cannot be assigned through the staff endpoints.");
     }
 
+    /// <summary>Checked before any write: a create inserts the AspNetUsers row before UserSave runs.</summary>
+    private async Task EnsureCountryCodesExistAsync(UserUpsertRequest r, CancellationToken ct)
+    {
+        foreach ((string field, long? id) in new[] { ("phoneCountryCodeId", r.PhoneCountryCodeId), ("whatsAppCountryCodeId", r.WhatsAppCountryCodeId) })
+            if (id is { } codeId && !await users.CountryCodeExistsAsync(codeId, ct))
+                throw new BusinessRuleException($"{field} {codeId} is not a known country code.");
+    }
+
     /// <summary>Case-insensitive (the database collation is CI), across every non-deleted profile, staff or customer.</summary>
     private async Task EnsureUsernameFreeAsync(string username, long exceptUserProfileId, CancellationToken ct)
     {
@@ -300,7 +346,8 @@ public sealed class UserService(
     private static UserSaveArgs ToArgs(long userProfileId, UserUpsertRequest r, string? username, string? email, string? aspNetUserId) => new(
         userProfileId, r.Code, r.FullName.Trim(), username, email, r.Url, aspNetUserId, r.RoleId, r.GenderId, r.StatusId,
         r.CustomerTagLimit?.ToString(), r.Address, r.CountryCode, r.CountryId, r.CityId, r.ReportsToUserId,
-        r.OfficeLocationCountryId, r.WhatsAppNumber, r.RemoteAccessAllowed);
+        r.OfficeLocationCountryId, r.WhatsAppNumber?.Trim(), r.RemoteAccessAllowed,
+        r.Phone?.Trim(), r.PhoneCountryCodeId, r.WhatsAppCountryCodeId);
 
     /// <summary>16 chars from an unambiguous alphabet, always containing a letter and a digit (satisfies the change-password policy).</summary>
     internal static string GenerateTemporaryPassword()

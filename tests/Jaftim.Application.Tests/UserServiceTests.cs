@@ -131,6 +131,57 @@ public sealed class UserServiceTests
     }
 
     [Fact]
+    public async Task Phone_and_whatsapp_are_saved_as_number_plus_country_code_id()
+    {
+        var users = new UsersFake();
+        UserService service = Build(users, new CatalogFake());
+
+        await service.CreateAsync(Request("p@x.com") with
+        {
+            Phone = " 3001234567 ", PhoneCountryCodeId = 160, WhatsAppNumber = "8765722459", WhatsAppCountryCodeId = 7,
+        }, CancellationToken.None);
+        await service.CreateAsync(Request("q@x.com"), CancellationToken.None);   // both numbers optional
+
+        UserSaveArgs saved = users.Saved[0];
+        Assert.Equal(("3001234567", 160L), (saved.Phone, saved.PhoneCountryCodeId));    // trimmed
+        Assert.Equal(("8765722459", 7L), (saved.OfficialWhatsapp, saved.WhatsAppCountryCodeId));
+        Assert.Equal((null, null, null, null), (users.Saved[1].Phone, users.Saved[1].PhoneCountryCodeId, users.Saved[1].OfficialWhatsapp, users.Saved[1].WhatsAppCountryCodeId));
+    }
+
+    [Theory]
+    [InlineData("3001234567", null, null, null)]            // phone without its code
+    [InlineData(null, 160L, null, null)]                    // code without the phone
+    [InlineData(null, null, "8765722459", null)]            // WhatsApp without its code
+    [InlineData(null, null, null, 7L)]                      // code without the WhatsApp
+    [InlineData("+923001234567", 160L, null, null)]         // the code typed into the number
+    [InlineData("300-1234567", 160L, null, null)]           // not digits
+    [InlineData("123", 160L, null, null)]                   // too short
+    [InlineData("1234567890123456", 160L, null, null)]      // too long (E.164: 15)
+    [InlineData("3001234567", 0L, null, null)]              // not an id
+    public async Task An_incomplete_or_malformed_number_is_rejected(string? phone, long? phoneCode, string? whatsApp, long? whatsAppCode)
+    {
+        var users = new UsersFake();
+        UserService service = Build(users, new CatalogFake());
+        await Assert.ThrowsAsync<Domain.Exceptions.ValidationException>(() => service.CreateAsync(Request("v@x.com") with
+        {
+            Phone = phone, PhoneCountryCodeId = phoneCode, WhatsAppNumber = whatsApp, WhatsAppCountryCodeId = whatsAppCode,
+        }, CancellationToken.None));
+        Assert.Empty(users.Saved);
+    }
+
+    [Fact]
+    public async Task An_unknown_country_code_id_is_rejected_before_anything_is_written()
+    {
+        var users = new UsersFake { Detail = new UserDetail { UserProfileId = 7, Email = "m@x.com", RoleId = 2, StatusId = 2 } };
+        UserService service = Build(users, new CatalogFake());
+
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.CreateAsync(Request("n@x.com") with { Phone = "3001234567", PhoneCountryCodeId = 999 }, CancellationToken.None));
+        await Assert.ThrowsAsync<BusinessRuleException>(() => service.UpdateAsync(7, Request(null) with { WhatsAppNumber = "3001234567", WhatsAppCountryCodeId = 999 }, CancellationToken.None));
+        Assert.Empty(users.AspNetUsersInserted);   // a create would otherwise leave an orphan login row
+        Assert.Empty(users.Saved);
+    }
+
+    [Fact]
     public async Task Toggle_refuses_self_deactivation()
     {
         var users = new UsersFake { Detail = new UserDetail { UserProfileId = 500, StatusId = 2, RoleId = 2 } };
@@ -193,6 +244,8 @@ public sealed class UserServiceTests
         public Task InsertAspNetUserAsync(string id, string email, string passwordHash, CancellationToken ct = default) { AspNetUsersInserted.Add((id, email, passwordHash)); return Task.CompletedTask; }
         public HashSet<string> TakenUsernames { get; } = new(StringComparer.OrdinalIgnoreCase);
         public List<string> UsernameChecks { get; } = [];
+        public HashSet<long> KnownCountryCodes { get; } = [7, 160];
+        public Task<bool> CountryCodeExistsAsync(long countryCodeId, CancellationToken ct = default) => Task.FromResult(KnownCountryCodes.Contains(countryCodeId));
         public Task<bool> UsernameTakenAsync(string username, long exceptUserProfileId, CancellationToken ct = default)
         {
             UsernameChecks.Add(username);

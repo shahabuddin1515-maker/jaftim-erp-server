@@ -85,10 +85,10 @@ public sealed class UserRepository(IDbExecutor db, IDateTimeProvider clock) : IU
         db.QueryPagedAsync<UserListItem>(SpCall.Procedure("UserGetAll_V2").With("@UserTypeId", request.UserTypeId), request, ct);
 
     public Task<UserDetail?> GetDetailAsync(long userProfileId, CancellationToken ct = default) =>
-        db.QueryFirstOrDefaultAsync<UserDetail>(SpCall.Procedure("UserGetById").With("@UserProfileId", userProfileId), ct);
+        db.QueryFirstOrDefaultAsync<UserDetail>(SpCall.Procedure("UserGetById_V2").With("@UserProfileId", userProfileId), ct);
 
-    // Parameter list copied verbatim from the legacy UserRepository.UserSave. UserSave_V2 (database/v2/012) is UserSave
-    // plus Username on update. Known procedure quirks, preserved: every INSERT also leaves a UserProfileDetail row with
+    // Parameter list copied verbatim from the legacy UserRepository.UserSave, plus the v2 additions. UserSave_V2
+    // (database/v2/012, redefined by 016) is UserSave plus Username on update and the phone/WhatsApp country codes. Known procedure quirks, preserved: every INSERT also leaves a UserProfileDetail row with
     // UserProfileId = 0 (unconditional delete+insert after the insert branch), and only @CreatedBy = 1 may change
     // RemoteAccessAllowed.
     public Task SaveAsync(UserSaveArgs a, CancellationToken ct = default) =>
@@ -112,7 +112,10 @@ public sealed class UserRepository(IDbExecutor db, IDateTimeProvider clock) : IU
                 .With("@ReportsTo_UserId", a.ReportsToUserId)
                 .With("@OfficeLocation_CountryId", a.OfficeLocationCountryId)
                 .With("@OfficialWhatsapp", a.OfficialWhatsapp, DbType.AnsiString, 200)
-                .With("@RemoteAccessAllowed", a.RemoteAccessAllowed), ct);
+                .With("@RemoteAccessAllowed", a.RemoteAccessAllowed)
+                .With("@Phone", a.Phone, DbType.String, 400)
+                .With("@PhoneCountryCodeId", a.PhoneCountryCodeId)
+                .With("@WhatsAppCountryCodeId", a.WhatsAppCountryCodeId), ct);
 
     // Plain read like GetByIdAsync; served by IX_UserProfile_Username_Active.
     public async Task<bool> UsernameTakenAsync(string username, long exceptUserProfileId, CancellationToken ct = default) =>
@@ -123,6 +126,13 @@ public sealed class UserRepository(IDbExecutor db, IDateTimeProvider clock) : IU
                 """)
                 .With("@Username", username, DbType.String, 2000)
                 .With("@Except", exceptUserProfileId)
+                .WithoutAudit(), ct) is not null;
+
+    // Same filter as vw_CountryDialCode, so any id the dropdown offers is accepted.
+    public async Task<bool> CountryCodeExistsAsync(long countryCodeId, CancellationToken ct = default) =>
+        await db.QueryFirstOrDefaultAsync<int?>(
+            SpCall.Text("SELECT TOP (1) 1 FROM dbo.vw_CountryDialCode WHERE Base_CountryCode_Id = @Id")
+                .With("@Id", countryCodeId)
                 .WithoutAudit(), ct) is not null;
 
     public Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default) =>

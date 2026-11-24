@@ -143,6 +143,32 @@ The user form's "Reporting Line" dropdown fills `UserProfile.ReportsTo_UserId`. 
 - **Not enforced on save**: `POST`/`PUT /api/users` accept any `reportsToUserId`, as legacy did. The dropdown is the
   only guard, so a cycle (`docs/REWRITE_PLAN.md` section 7) can still be saved.
 
+## Phone and WhatsApp
+
+Staff users have a phone and an official WhatsApp, each stored as **country code + number, separately** (owner,
+2026-11-24; `database/v2/016`):
+
+| Part | Phone | WhatsApp |
+|---|---|---|
+| number (4-15 digits, no code) | `UserProfileDetail.Phone` | `UserProfileDetail.WhatsAppNumber` |
+| country code (`Base_CountryCodes` id) | `UserProfileDetail.PhoneCountryCodeId` | `UserProfileDetail.WhatsAppCountryCodeId` |
+
+- The code is an **id**, not the dial text, because one dial code belongs to several countries (`+1` = USA, Canada,
+  Jamaica, ...) and the id keeps which one was picked. Reads (`GET /api/users/{id}`, the list, the `PUT` response)
+  return the id and the dial text (`phoneCountryCode` = `"+92"`). The dropdown is
+  `GET /api/lookups?tables=vw_CountryDialCode` (`Pakistan (+92)`, ordered by name).
+- A number and its code are sent together or not at all (400), and an id not in `vw_CountryDialCode` is 422 - checked
+  before anything is written, because a create inserts the `AspNetUsers` row before `UserSave_V2` runs. `PUT` replaces
+  both pairs: an omitted pair is cleared, like every other field of the form.
+- Before 016 staff had only the WhatsApp, saved with no code (3 users locally, e.g. `3120236808`). Those keep their
+  number with a null code; re-saving such a user now needs a code with the number.
+- **Customers are not changed**: their numbers stay combined (`+18765722459`) in `Phone`/`SecondaryPhone`/
+  `WhatsAppNumber`, and the duplicate-phone checks of `CustomerSave`/`InquirySave` compare those combined strings.
+- `UserProfile.CountryCode` (`countryCode` in the request) is a different, legacy column: the legacy form never filled
+  it (0 of 1,364 rows) and it is not the code of either number.
+- **Legacy coexistence**: the legacy `UserSave` (legacy employee edit form) deletes and re-inserts `UserProfileDetail`
+  without these columns, so saving a staff user in the legacy app clears the phone and both codes.
+
 ## Not ported yet
 
 `UserController.OrgChart` (`GetOrgChart`) - still `todo` in `docs/MIGRATION_INVENTORY.md`.

@@ -14,6 +14,9 @@ GO
     RemoteAccessAllowed. The legacy UserSave is untouched - the legacy app keeps calling it.
 
     Idempotent (CREATE OR ALTER). Apply to every tenant database.
+
+    SUPERSEDED by 016_UserPhone_CountryCode.sql, which redefines UserSave_V2 (this body + phone/WhatsApp country
+    codes). Run 012 then 016; never 012 alone on a database that already has 016.
 */
 CREATE OR ALTER PROCEDURE dbo.UserSave_V2
     @UserProfileId            BIGINT,

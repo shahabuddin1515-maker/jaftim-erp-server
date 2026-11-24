@@ -28,6 +28,7 @@ GO
 -- non-customer outside user types 1/7, anyone else only their reporting tree (fn_GetUserChildProfiles).
 -- New: @UserTypeId actually filters (UserGetAll declared it and ignored it).
 -- Sort keys: code, fullName, email, roleName, userStatusName, taggedCount, createdAt, modifiedAt.
+-- SUPERSEDED by 016_UserPhone_CountryCode.sql (this body + the phone/WhatsApp country-code columns); run 010 then 016.
 -- =====================================================================================================================
 CREATE OR ALTER PROCEDURE dbo.UserGetAll_V2
     @UserTypeId     INT           = NULL,

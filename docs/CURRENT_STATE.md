@@ -20,6 +20,14 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **Staff phone and WhatsApp as country code + number, separately** (2026-11-24, owner: both numbers, code as a
+  `Base_CountryCodes` id): new `database/v2/016_UserPhone_CountryCode.sql` (both local tenants, re-run idempotent) -
+  two FK columns on `UserProfileDetail`, `vw_CountryDialCode` dropdown, `UserSave_V2`/`UserGetAll_V2` redefined, new
+  `UserGetById_V2`. Request: `phone`+`phoneCountryCodeId`, `whatsAppNumber`+`whatsAppCountryCodeId`; reads add the
+  dial text. `docs/USERS.md` "Phone and WhatsApp". Verified: build clean, 178 tests pass (scratchpad copy; the owner's
+  API, PID 30176, held the DLLs); live on :5150 - create/GET/PUT/list/search, 400 for an unpaired or `+92...` number,
+  422 for an unknown code id. The first list call timed out once (30 s, not reproduced: the procedure runs in 0.5 s
+  and 8 further calls took 57-81 ms). Test user 23607 created in `jaftim-local-db` and deactivated.
 - **`username` in the `POST`/`PUT /api/users` responses** (2026-11-24, owner): create's result carries the stored
   username (sent value, or the e-mail default); update now returns the saved user (`UserDetail`, as `GET`) instead of
   no data. Additive for clients. Verified: build clean, 167 tests pass (in a scratchpad copy - a `dotnet run` of the
@@ -98,8 +106,8 @@ Nothing is half-implemented. Not started:
 
 ## Current Verification State
 
-Latest (2026-11-24, in place): `dotnet build` - **no warnings, no errors**; `dotnet test` - **167 passing**
-(151 Application + 16 Api), 0 failing.
+Latest (2026-11-24, scratchpad copy of the tree): `dotnet build` - **no warnings, no errors**; `dotnet test` -
+**178 passing** (162 Application + 16 Api), 0 failing. Rebuild in place once the owner's running API is stopped.
 
 Pipeline verification from 2026-10-05 (still the latest live run of these parts):
 - `v2/007`, `v2/008`, `v2/009` applied to **both** local tenants (`007` re-run twice - idempotent).
@@ -142,7 +150,8 @@ No blockers. Owed by the owner/product, not blocking:
    `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010`-`v2/014` and `catalog/003` are now
    required too**: without them `GET /api/users`, every tagging list, `GET /api/roles`, `GET /api/tenants`,
    `POST`/`PUT /api/users`, `GET /api/lookups/office-locations` and `GET /api/lookups/scoped/{table}` fail; `v2/015`
-   (after `014`; it redefines `Lookup_GetScoped`) is needed for `vw_UserHierarchy`.
+   (after `014`; it redefines `Lookup_GetScoped`) is needed for `vw_UserHierarchy`. **`v2/016`** (after 010 and 012)
+   is now required by every `/api/users` call (`UserGetById_V2`, new columns in `UserSave_V2`/`UserGetAll_V2`).
 2. 12 roles have zero `RoleActionMapping` rows (query in `docs/DATABASE.md`).
 3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
 4. **Reporting-line cycle** 12259 <-> 12475: `UserGetAll`, tagging and inquiry lists error for those callers. Fix the
@@ -155,7 +164,8 @@ No blockers. Owed by the owner/product, not blocking:
 
 0. **Apply `database/v2/014_Lookup_Scoped.sql` then `015_Lookup_RoleFilter.sql` to UAT** (owner authorised 014 on
    2026-11-20 and 015 on 2026-11-24; both depend only on legacy objects, 015 must follow 014). Blocked on credentials: none are configured for this repo. Run it with `sqlcmd -I -b`, then verify with
-   `OBJECT_DEFINITION(OBJECT_ID('dbo.Lookup_GetScoped'))` and check UAT for the 12259/12475 cycle.
+   `OBJECT_DEFINITION(OBJECT_ID('dbo.Lookup_GetScoped'))` and check UAT for the 12259/12475 cycle. `v2/016` is not
+   yet authorised for UAT - ask the owner; it must go with this build (the user endpoints need it).
 1. **Port bulk inquiry import** (`InquiryController.BulkInquirySave`) as a Hangfire job over `BulkInquiryImport_V2`
    (TVP) with progress, written the pipeline way (`IJobRunner`; notify through `INotificationDispatcher`). Start by
    reading the legacy action, the procedure and its table type, and how the legacy screen reports per-row errors.

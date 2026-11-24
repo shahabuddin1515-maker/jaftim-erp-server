@@ -44,6 +44,8 @@ public interface IUserRepository
     Task SaveAsync(UserSaveArgs args, CancellationToken ct = default);
     /// <summary>Does a non-deleted profile other than <paramref name="exceptUserProfileId"/> already use this username?</summary>
     Task<bool> UsernameTakenAsync(string username, long exceptUserProfileId, CancellationToken ct = default);
+    /// <summary>A non-deleted Base_CountryCodes row with this id exists (the vw_CountryDialCode dropdown's ids).</summary>
+    Task<bool> CountryCodeExistsAsync(long countryCodeId, CancellationToken ct = default);
     /// <summary>EXEC ActiveInActiveCall.</summary>
     Task ToggleActiveAsync(long userProfileId, CancellationToken ct = default);
     /// <summary>Inserts the tenant AspNetUsers row the legacy UserManager.CreateAsync used to create (no procedure exists).</summary>
