@@ -80,12 +80,14 @@ public sealed class UserServiceTests
         var users = new UsersFake();
         UserService service = Build(users, new CatalogFake());
 
-        await service.CreateAsync(Request("a@x.com") with { Username = "  Azhar1567 " }, CancellationToken.None);
-        await service.CreateAsync(Request("b@x.com"), CancellationToken.None);
+        UserCreatedResult given = await service.CreateAsync(Request("a@x.com") with { Username = "  Azhar1567 " }, CancellationToken.None);
+        UserCreatedResult defaulted = await service.CreateAsync(Request("b@x.com"), CancellationToken.None);
 
         Assert.Equal("Azhar1567", users.Saved[0].Username);   // trimmed
         Assert.Equal("b@x.com", users.Saved[1].Username);     // legacy default: username = e-mail
         Assert.Equal(new[] { "Azhar1567", "b@x.com" }, users.UsernameChecks);
+        Assert.Equal("Azhar1567", given.Username);            // the response carries what was stored
+        Assert.Equal("b@x.com", defaulted.Username);
     }
 
     [Fact]
@@ -110,12 +112,14 @@ public sealed class UserServiceTests
         users.TakenUsernames.Add("saad");   // a legacy duplicate: re-saving it unchanged must still work
         UserService service = Build(users, new CatalogFake());
 
-        await service.UpdateAsync(7, Request(null), CancellationToken.None);
+        UserDetail kept = await service.UpdateAsync(7, Request(null), CancellationToken.None);
         await service.UpdateAsync(7, Request(null) with { Username = "saad" }, CancellationToken.None);
-        await service.UpdateAsync(7, Request(null) with { Username = "Saad Khan" }, CancellationToken.None);
+        UserDetail renamed = await service.UpdateAsync(7, Request(null) with { Username = "Saad Khan" }, CancellationToken.None);
 
         Assert.Equal(new[] { "Saad", "saad", "Saad Khan" }, users.Saved.Select(s => s.Username));
         Assert.Equal(new[] { "Saad Khan" }, users.UsernameChecks);
+        Assert.Equal("Saad", kept.Username);                  // the response is the user as stored after the save
+        Assert.Equal("Saad Khan", renamed.Username);
     }
 
     [Fact]
@@ -167,7 +171,7 @@ public sealed class UserServiceTests
             Task.FromResult(email == ExistingEmail ? new UserProfileWithRole { UserProfileId = 1 } : null);
         public Task<UserProfileWithRole?> GetByIdAsync(long userProfileId, CancellationToken ct = default) => Task.FromResult<UserProfileWithRole?>(null);
         public Task<UserProfileWithRole?> GetByAspNetUserIdAsync(string aspNetUserId, CancellationToken ct = default) =>
-            Task.FromResult<UserProfileWithRole?>(new UserProfileWithRole { UserProfileId = 123, AspNetUserId = aspNetUserId, RoleId = 2 });
+            Task.FromResult<UserProfileWithRole?>(new UserProfileWithRole { UserProfileId = 123, AspNetUserId = aspNetUserId, RoleId = 2, Username = Saved.LastOrDefault()?.Username });
         public Task<IReadOnlyList<RoleAction>> GetRoleActionsAsync(long roleId, CancellationToken ct = default) => Task.FromResult<IReadOnlyList<RoleAction>>([]);
         public Task<IReadOnlyList<string>> GetWhitelistedCidrsAsync(CancellationToken ct = default) => Task.FromResult<IReadOnlyList<string>>([]);
         public Task SaveActionUrlAsync(string actionUrl, long userProfileId, CancellationToken ct = default) => Task.CompletedTask;

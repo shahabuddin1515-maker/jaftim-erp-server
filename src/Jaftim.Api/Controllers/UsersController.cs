@@ -32,7 +32,8 @@ public sealed class UsersController(IUserService users) : ApiControllerBase
     /// <summary>
     /// Create a staff user. Creates the login (catalog account + this tenant's AspNetUsers row) and the profile
     /// (UserSave). If no password is supplied a temporary one is generated and returned ONCE in this response.
-    /// An e-mail that already exists in another company links to that person's existing login instead.
+    /// An e-mail that already exists in another company links to that person's existing login instead. The response
+    /// carries the stored <c>username</c> (the one sent, or the e-mail when none was sent).
     /// </summary>
     [HttpPost]
     [HasPermission(Permissions.EmployeeCreate)]
@@ -42,14 +43,14 @@ public sealed class UsersController(IUserService users) : ApiControllerBase
         return CreatedAtAction(nameof(GetById), new { userProfileId = result.UserProfileId }, ApiResponse.Ok(result, "User created."));
     }
 
-    /// <summary>Update a staff user (UserSave). Email and password are not changed here.</summary>
+    /// <summary>
+    /// Update a staff user (UserSave_V2). Email and password are not changed here. Returns the user as stored after
+    /// the save - the same shape as GET /api/users/{id}, including <c>username</c>.
+    /// </summary>
     [HttpPut("{userProfileId:long}")]
     [HasPermission(Permissions.EmployeeCreate)]
-    public async Task<ActionResult<ApiResponse<object?>>> Update(long userProfileId, [FromBody] UserUpsertRequest request, CancellationToken ct)
-    {
-        await users.UpdateAsync(userProfileId, request, ct);
-        return Ok("User updated.");
-    }
+    public async Task<ActionResult<ApiResponse<UserDetail>>> Update(long userProfileId, [FromBody] UserUpsertRequest request, CancellationToken ct) =>
+        Ok(await users.UpdateAsync(userProfileId, request, ct), "User updated.");
 
     /// <summary>Flip Active/Inactive (ActiveInActiveCall). Deactivating revokes the user's live API sessions.</summary>
     [HttpPost("{userProfileId:long}/toggle-active")]

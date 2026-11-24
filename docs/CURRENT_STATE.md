@@ -20,6 +20,11 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **`username` in the `POST`/`PUT /api/users` responses** (2026-11-24, owner): create's result carries the stored
+  username (sent value, or the e-mail default); update now returns the saved user (`UserDetail`, as `GET`) instead of
+  no data. Additive for clients. Verified: build clean, 167 tests pass (in a scratchpad copy - a `dotnet run` of the
+  API started outside this session held the DLLs); live on :5150 from that build - create with/without username,
+  rename, omit-keeps, duplicate 409. Test users 23605/23606 created in `jaftim-local-db` and deactivated.
 - **Generic role-filtered lookups + reporting line** (2026-11-24): `GET /api/lookups/scoped/{table}?roleId=` filters
   any source registered in `LookupRoleFilter` on its role column (`roleId` required) - recipe in `docs/CONVENTIONS.md`.
   First source: `vw_UserHierarchy`, the user form's reporting-line dropdown (direct `UserHierarchy` parents, active

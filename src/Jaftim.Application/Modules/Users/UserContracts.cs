@@ -111,7 +111,10 @@ public sealed record UserUpsertRequest(
     bool RemoteAccessAllowed = false,
     string? Username = null);
 
-public sealed record UserCreatedResult(long UserProfileId, string AccountId, string Email, string? TemporaryPassword, bool LinkedExistingAccount);
+/// <summary>
+/// POST /api/users result. Username is the value stored - the one sent, trimmed, or the e-mail when none was sent.
+/// </summary>
+public sealed record UserCreatedResult(long UserProfileId, string AccountId, string Email, string? Username, string? TemporaryPassword, bool LinkedExistingAccount);
 
 public sealed class UserUpsertRequestValidator : AbstractValidator<UserUpsertRequest>
 {
@@ -162,7 +165,8 @@ public interface IUserService
     Task<PagedResult<UserListItem>> GetAllAsync(UserListRequest request, CancellationToken ct = default);
     Task<UserDetail> GetByIdAsync(long userProfileId, CancellationToken ct = default);
     Task<UserCreatedResult> CreateAsync(UserUpsertRequest request, CancellationToken ct = default);
-    Task UpdateAsync(long userProfileId, UserUpsertRequest request, CancellationToken ct = default);
+    /// <summary>Saves and returns the user as stored afterwards (the GET /api/users/{id} shape, username included).</summary>
+    Task<UserDetail> UpdateAsync(long userProfileId, UserUpsertRequest request, CancellationToken ct = default);
     /// <summary>EXEC ActiveInActiveCall - flips StatusId 1&lt;-&gt;2. Deactivation also revokes the account's live sessions in this tenant.</summary>
     Task<int> ToggleActiveAsync(long userProfileId, CancellationToken ct = default);
 }
@@ -233,10 +237,10 @@ public sealed class UserService(
         await audit.RecordAsync("User.Created", "UserProfile", created.UserProfileId, null,
             new { created.UserProfileId, email, request.FullName, request.RoleId, request.StatusId, LinkedExistingAccount = existing is not null }, ct);
 
-        return new UserCreatedResult(created.UserProfileId, accountId, email, temporaryPassword, existing is not null);
+        return new UserCreatedResult(created.UserProfileId, accountId, email, created.Username ?? username, temporaryPassword, existing is not null);
     }
 
-    public async Task UpdateAsync(long userProfileId, UserUpsertRequest request, CancellationToken ct = default)
+    public async Task<UserDetail> UpdateAsync(long userProfileId, UserUpsertRequest request, CancellationToken ct = default)
     {
         await validator.ValidateAndThrowAppAsync(request, ct);
         UserDetail before = await GetByIdAsync(userProfileId, ct);
@@ -259,6 +263,7 @@ public sealed class UserService(
             await catalog.BumpTokenVersionAsync(id, ct);
 
         await audit.RecordAsync("User.Updated", "UserProfile", userProfileId, before, after, ct);
+        return after;
     }
 
     public async Task<int> ToggleActiveAsync(long userProfileId, CancellationToken ct = default)
