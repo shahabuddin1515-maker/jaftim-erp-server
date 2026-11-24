@@ -33,6 +33,17 @@ public sealed class LookupsController(ILookupService lookups) : ApiControllerBas
         Ok(await lookups.GetOfficeLocationsAsync(ct));
 
     /// <summary>
+    /// GET /api/lookups/cities?countryId=84 - the cities of one country (Base_Country id, as in
+    /// <c>GET /api/lookups?tables=Base_Country</c>), <c>[{ id, name }]</c> sorted by name. The id is the user's
+    /// <c>cityId</c>. Not paged: the largest country has about 3,700 cities. countryId missing or 0 or less -> 422; a
+    /// country without cities -> empty list. Legacy: GetAuthData keyword -> SYS_Auth_GetCity.
+    /// </summary>
+    [HttpGet("cities")]
+    [HasPermission(Permissions.AuthTable)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<City>>>> GetCities([FromQuery] long countryId, CancellationToken ct) =>
+        Ok(await lookups.GetCitiesAsync(countryId, ct));
+
+    /// <summary>
     /// GET /api/lookups/scoped/SalesPerson_View - one dropdown source (any name the plain lookup accepts) filtered to
     /// the signed-in user, as <c>[{ tableName, id, value }]</c> sorted by value. The rules below use <c>roleId</c> when
     /// it is sent (optional, e.g. stock save loading a list for a given role), otherwise the caller's own role from the

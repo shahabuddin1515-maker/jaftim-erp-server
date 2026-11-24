@@ -18,6 +18,9 @@ public interface ILookupRepository
     /// <summary>EXEC Lookup_OfficeLocations (database/v2/013) - Base_Country rows with IsLocationCountry = 1.</summary>
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
 
+    /// <summary>EXEC SYS_Auth_GetCity @FK_Base_Country_Id (legacy, unchanged) - the country's non-deleted cities.</summary>
+    Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default);
+
     /// <summary>
     /// EXEC Lookup_GetScoped @TableName, @RoleId (database/v2/014) - one whitelisted source, scoped to the caller
     /// (@CreatedBy) by <paramref name="roleId"/> when given, else by the caller's primary role.
@@ -29,6 +32,7 @@ public interface ILookupService
 {
     Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default);
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default);
     Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, long? roleId = null, CancellationToken ct = default);
 }
 
@@ -36,6 +40,19 @@ public sealed class LookupService(ILookupRepository repository) : ILookupService
 {
     public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
         repository.GetOfficeLocationsAsync(ct);
+
+    /// <summary>
+    /// The cities of one Base_Country, sorted by name (the legacy procedure has no order). countryId of 0 or less is
+    /// 422; a country with no cities, or no such country, is an empty list - as legacy.
+    /// </summary>
+    public async Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default)
+    {
+        if (countryId <= 0)
+            throw new BusinessRuleException("countryId must be a positive country id.");
+
+        IReadOnlyList<City> cities = await repository.GetCitiesAsync(countryId, ct);
+        return cities.OrderBy(c => c.Name, StringComparer.OrdinalIgnoreCase).ThenBy(c => c.Id).ToList();
+    }
 
     /// <summary>
     /// The caller's view of one dropdown source. The rules use <paramref name="roleId"/> when the screen sends one

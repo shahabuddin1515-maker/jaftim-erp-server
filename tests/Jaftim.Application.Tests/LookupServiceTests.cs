@@ -25,6 +25,34 @@ public sealed class LookupServiceTests
 
         public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
+
+        public List<long> CityCalls { get; } = [];
+        public Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default)
+        {
+            CityCalls.Add(countryId);
+            return Task.FromResult<IReadOnlyList<City>>(
+                [new City { Id = 3, Name = "Mandeville" }, new City { Id = 1, Name = "kingston" }, new City { Id = 2, Name = "Barrett Town" }]);
+        }
+    }
+
+    [Fact]
+    public async Task Cities_of_a_country_come_back_sorted_by_name()
+    {
+        var repository = new FakeLookupRepository();
+        IReadOnlyList<City> cities = await new LookupService(repository).GetCitiesAsync(84);
+
+        Assert.Equal([84L], repository.CityCalls);
+        Assert.Equal(["Barrett Town", "kingston", "Mandeville"], cities.Select(c => c.Name));   // case-insensitive
+    }
+
+    [Theory]
+    [InlineData(0L)]
+    [InlineData(-5L)]
+    public async Task Cities_need_a_positive_country_id(long countryId)
+    {
+        var repository = new FakeLookupRepository();
+        await Assert.ThrowsAsync<BusinessRuleException>(() => new LookupService(repository).GetCitiesAsync(countryId));
+        Assert.Empty(repository.CityCalls);
     }
 
     [Fact]

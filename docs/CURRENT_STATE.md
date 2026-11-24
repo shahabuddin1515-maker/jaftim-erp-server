@@ -20,6 +20,10 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **`GET /api/lookups/cities?countryId=`** (2026-11-24, owner): the cities of one `Base_Country`, `{ id, name }` by
+  name, over the legacy `SYS_Auth_GetCity` (no database change, nothing to release). Verified: build clean, 181 tests
+  pass (scratchpad copy); live on :5150 - Jamaica 13 and India 3,699 rows (= `Base_City`, 104 ms), unknown country
+  empty, missing/0 -> 422, `abc` -> 400, anonymous 401.
 - **Staff phone and WhatsApp as country code + number, separately** (2026-11-24, owner: both numbers, code as a
   `Base_CountryCodes` id): new `database/v2/016_UserPhone_CountryCode.sql` (both local tenants, re-run idempotent) -
   two FK columns on `UserProfileDetail`, `vw_CountryDialCode` dropdown, `UserSave_V2`/`UserGetAll_V2` redefined, new
@@ -107,7 +111,7 @@ Nothing is half-implemented. Not started:
 ## Current Verification State
 
 Latest (2026-11-24, scratchpad copy of the tree): `dotnet build` - **no warnings, no errors**; `dotnet test` -
-**178 passing** (162 Application + 16 Api), 0 failing. Rebuild in place once the owner's running API is stopped.
+**181 passing** (165 Application + 16 Api), 0 failing. Rebuild in place once the owner's running API is stopped.
 
 Pipeline verification from 2026-10-05 (still the latest live run of these parts):
 - `v2/007`, `v2/008`, `v2/009` applied to **both** local tenants (`007` re-run twice - idempotent).

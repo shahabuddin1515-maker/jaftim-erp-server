@@ -18,11 +18,25 @@ public sealed class LookupRepository(IDbExecutor db, IMemoryCache cache) : ILook
     public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
         db.QueryAsync<OfficeLocation>(SpCall.Procedure("Lookup_OfficeLocations"), ct);
 
+    // The legacy procedure returns Base_City.* - only the id and name are projected.
+    public async Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default)
+    {
+        IReadOnlyList<CityRow> rows = await db.QueryAsync<CityRow>(
+            SpCall.Procedure("SYS_Auth_GetCity").With("@FK_Base_Country_Id", countryId), ct);
+        return rows.Select(r => new City { Id = r.Base_City_Id, Name = r.Base_City_Name ?? string.Empty }).ToList();
+    }
+
     public Task<IReadOnlyList<LookupItem>> GetScopedValuesAsync(string tableName, long? roleId, CancellationToken ct = default) =>
         db.QueryAsync<LookupItem>(
             SpCall.Procedure("Lookup_GetScoped")
                 .With("@TableName", tableName, DbType.String)
                 .With("@RoleId", roleId, DbType.Int64), ct);
+
+    private sealed class CityRow
+    {
+        public long Base_City_Id { get; set; }
+        public string? Base_City_Name { get; set; }
+    }
 
     public async Task<IReadOnlySet<string>> GetAllowedTableNamesAsync(CancellationToken ct = default)
     {
