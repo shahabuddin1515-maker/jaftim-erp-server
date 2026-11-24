@@ -10,16 +10,8 @@ public sealed class LookupServiceTests
     {
         public List<string> ScopedCalls { get; } = [];
         public List<long?> ScopedRoleIds { get; } = [];
-        public List<long> ReportingLineRoleIds { get; } = [];
-
-        public Task<IReadOnlyList<LookupItem>> GetReportingLineAsync(long roleId, CancellationToken ct = default)
-        {
-            ReportingLineRoleIds.Add(roleId);
-            return Task.FromResult<IReadOnlyList<LookupItem>>([new LookupItem { TableName = "ReportingLine", Id = 150, Value = "Sales Manager" }]);
-        }
-
         public Task<IReadOnlySet<string>> GetAllowedTableNamesAsync(CancellationToken ct = default) =>
-            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SalesPerson_View", "Base_Make" });
+            Task.FromResult<IReadOnlySet<string>>(new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "SalesPerson_View", "Base_Make", "vw_UserHierarchy" });
 
         public Task<IReadOnlyList<LookupItem>> GetScopedValuesAsync(string tableName, long? roleId, CancellationToken ct = default)
         {
@@ -66,35 +58,15 @@ public sealed class LookupServiceTests
         Assert.Empty(repository.ScopedCalls);
     }
 
-    [Theory]
-    [InlineData("ReportingLine")]
-    [InlineData(" reportingline ")]
-    public async Task Reporting_line_is_served_for_the_given_role_although_it_is_not_a_whitelisted_table(string source)
-    {
-        var repository = new FakeLookupRepository();
-        IReadOnlyList<LookupItem> rows = await new LookupService(repository).GetScopedAsync(source, roleId: 2);
-
-        Assert.Equal([2L], repository.ReportingLineRoleIds);
-        Assert.Empty(repository.ScopedCalls);
-        Assert.Equal(150, Assert.Single(rows).Id);
-    }
-
     [Fact]
-    public async Task Reporting_line_requires_a_role_id()
+    public async Task A_whitelisted_view_goes_through_the_same_generic_path_with_its_role()
     {
+        // vw_UserHierarchy is role-filtered in SQL (LookupRoleFilter, database/v2/015); the service has no per-source code.
         var repository = new FakeLookupRepository();
+        await new LookupService(repository).GetScopedAsync("vw_UserHierarchy", roleId: 2);
 
-        await Assert.ThrowsAsync<BusinessRuleException>(() => new LookupService(repository).GetScopedAsync("ReportingLine"));
-        Assert.Empty(repository.ReportingLineRoleIds);
-    }
-
-    [Fact]
-    public async Task Reporting_line_rejects_a_role_id_that_is_not_positive()
-    {
-        var repository = new FakeLookupRepository();
-
-        await Assert.ThrowsAsync<BusinessRuleException>(() => new LookupService(repository).GetScopedAsync("ReportingLine", 0));
-        Assert.Empty(repository.ReportingLineRoleIds);
+        Assert.Equal(["vw_UserHierarchy"], repository.ScopedCalls);
+        Assert.Equal([2L], repository.ScopedRoleIds);
     }
 
     [Theory]

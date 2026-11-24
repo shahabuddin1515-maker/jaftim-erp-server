@@ -128,8 +128,10 @@ app and the reports would read 9 as Singapore and 185/186 as nothing. Until the 
 ## Reporting line
 
 The user form's "Reporting Line" dropdown fills `UserProfile.ReportsTo_UserId`. Its source is
-`GET /api/lookups/scoped/ReportingLine?roleId=<role of the user being edited>` (`Lookup_ReportingLine`,
-`database/v2/015`; legacy `SYS_Auth_GetReportingLineByRole` through `SYS_AuthMethod` keyword `GetReportingLineByRole`).
+`GET /api/lookups/scoped/vw_UserHierarchy?roleId=<role of the user being edited>` - the view `vw_UserHierarchy`
+(`RoleId`, `UserProfileId`, `FullName`; `database/v2/015`) through the generic role filter (`docs/CONVENTIONS.md`
+"Role-filtered lookup sources"). Legacy: `SYS_Auth_GetReportingLineByRole` through `SYS_AuthMethod` keyword
+`GetReportingLineByRole`.
 
 - The allowed managers come from `UserHierarchy`, which is keyed on **user type**, not role:
   role -> `Role.UserTypeId` -> `UserHierarchy.UserTypeParentId` -> every role of that type -> users whose **primary**

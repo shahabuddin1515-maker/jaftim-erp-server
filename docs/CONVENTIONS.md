@@ -56,6 +56,23 @@ roles/regions) and small configuration registries (notification types). Roles an
 list (owner, 2026-11-19); a dropdown that needs all of them passes `pageSize=200`. If one of these starts to
 grow, it moves into the rule above.
 
+## Role-filtered lookup sources (owner, 2026-11-24)
+
+`GET /api/lookups/scoped/{table}?roleId=` is generic: for a source registered in `dbo.LookupRoleFilter` it returns
+`[{ tableName, id, value }]` for the rows `WHERE <RoleColumn> = roleId`, and `roleId` is required (the procedure throws
+50000 -> 422). To add one - **no C# change**:
+
+1. A table or view with an id, a value and a role column (copy `vw_UserHierarchy` in `database/v2/015`). Put the
+   business rules - active users only, hierarchy - in the view.
+2. In a new numbered v2 script: a `SYS_DropDownsWithAuth` row (`TableName`, `TableId`, `TableValue`) and a
+   `LookupRoleFilter` row (`TableName`, `RoleColumn`), both `IF NOT EXISTS`.
+3. Verify the rows per role against the legacy source, then document the source in `LookupsController.GetScoped`'s
+   summary (the Swagger text).
+
+The whitelist row also exposes the source, unfiltered, to `GET /api/lookups` and the legacy `GetDllAuthTableValues`.
+So a role filter narrows a dropdown; it is never a security boundary (`docs/AUTH.md`). The allowed-name cache in
+`LookupRepository` holds for 10 minutes, so a new source can 404 until it expires or the API restarts.
+
 ## Catalog vs tenant
 
 - Anything about identity, tenants or sessions -> catalog: `ICatalogDbExecutor`, `Catalog_*` procedure in

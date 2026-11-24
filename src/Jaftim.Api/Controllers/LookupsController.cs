@@ -43,10 +43,11 @@ public sealed class LookupsController(ILookupService lookups) : ApiControllerBas
     /// someone with nobody under them gets an empty list).</item>
     /// <item><c>Customer_View</c>: a Sales Executive only the customers tagged to them; a CSD Manager or Team Lead
     /// Sales the customers tagged to them or anyone under them; anyone else every row.</item>
-    /// <item><c>ReportingLine</c> (the user form's "Reporting Line" dropdown; not a table): <c>roleId</c> is
-    /// <b>required</b> and is the role of the user being created or edited. Returns the active, non-deleted users whose
-    /// primary role is a direct parent of that role in UserHierarchy (e.g. Sales Executive -> Sales Managers and Team
-    /// Leads Sales). Not scoped to the caller. No roleId -> 422.</item>
+    /// <item><b>Role-filtered sources</b> (tables/views registered in LookupRoleFilter): only the rows whose role
+    /// column equals <c>roleId</c>, which is then <b>required</b> (missing -> 422) and is never replaced by the caller's
+    /// role. Today: <c>vw_UserHierarchy</c>, the user form's "Reporting Line" dropdown - <c>roleId</c> is the role of
+    /// the user being created or edited, and the rows are the active users whose primary role is a direct parent of
+    /// it in UserHierarchy (e.g. Sales Executive -> Sales Managers and Team Leads Sales).</item>
     /// <item>Every other source: every row, the same as <c>GET /api/lookups</c>.</item>
     /// </list>
     /// Unknown source -> 404; <c>roleId</c> of 0 or less -> 422. Not paged (a dropdown source).

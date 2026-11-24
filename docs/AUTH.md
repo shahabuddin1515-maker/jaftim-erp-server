@@ -83,7 +83,8 @@ the user's permission cache and writes `AuditLog` (`UserRole.Assigned/Revoked`, 
   `GET /api/lookups/scoped/{table}` accepts an optional `roleId` that replaces the caller's role in its rules (owner,
   2026-11-20, for screens such as stock save that load a list for a given role). That is acceptable only because its
   scoping is a convenience filter: `GET /api/lookups` returns the same rows unscoped under the same permission. Do not
-  copy it for row-level data.
+  copy it for row-level data. For role-filtered sources (`LookupRoleFilter`, e.g. `vw_UserHierarchy`) `roleId` is a
+  required plain filter - the role being edited - and the caller's role is not used at all.
 - After saving role rights call `IPermissionService.InvalidateRole`; after deactivating a user call
   `IAuthRepository.BumpTokenVersionAsync` and `TokenVersionValidator.Invalidate`.
 

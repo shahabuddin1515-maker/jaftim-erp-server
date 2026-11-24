@@ -27,6 +27,9 @@ GO
     table and are QUOTENAME'd; the requested name is never concatenated into SQL.
 
     Read-only, no table change. Idempotent (CREATE OR ALTER). Apply to every tenant database.
+
+    Superseded by 015_Lookup_RoleFilter.sql, which redefines this procedure with role-filtered sources added. Run 014
+    then 015; re-running 014 alone after 015 would drop the role filter.
 */
 CREATE OR ALTER PROCEDURE dbo.Lookup_GetScoped
     @TableName NVARCHAR(128),

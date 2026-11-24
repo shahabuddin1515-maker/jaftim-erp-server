@@ -20,12 +20,14 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
-- **`GET /api/lookups/scoped/ReportingLine?roleId=`** (2026-11-24): the user form's reporting-line dropdown - users
-  whose primary role is a direct `UserHierarchy` parent of `roleId` (required), active and not deleted (owner chose
-  direct parents and the filter). New `database/v2/015_Lookup_ReportingLine.sql` (both local tenants). Verified:
-  build clean, 170 tests pass (154 + 16); id sets equal the legacy query minus deleted/inactive users for all 25 roles
-  in both tenants; live on :5150 as 12475 - role 2 -> 8, 11 -> 2, 13 -> empty, no/0 roleId 422, anonymous 401.
-  `docs/USERS.md` "Reporting line".
+- **Generic role-filtered lookups + reporting line** (2026-11-24): `GET /api/lookups/scoped/{table}?roleId=` filters
+  any source registered in `LookupRoleFilter` on its role column (`roleId` required) - recipe in `docs/CONVENTIONS.md`.
+  First source: `vw_UserHierarchy`, the user form's reporting-line dropdown (direct `UserHierarchy` parents, active
+  users only - owner's choices). A first version hard-coded a `ReportingLine` source in C#; the owner asked for it to
+  be generic, so it was replaced the same day (`v2/015` rewritten as `015_Lookup_RoleFilter.sql` before any release).
+  Verified: build clean, 167 tests pass (151 + 16); both local tenants: all 25 roles equal the legacy query minus
+  deleted/inactive users, script re-run idempotent, other sources unchanged; live on :5150 as 12475 - role 2 -> 8,
+  11 -> 2, 13 -> empty, no roleId / 0 -> 422, old `ReportingLine` 404, anonymous 401. `docs/USERS.md` "Reporting line".
 - **`GET /api/lookups/scoped/{table}`** (2026-11-20): one dropdown source scoped to the caller (Team Lead Sales sees
   their reporting subtree in `SalesPerson_View`). The owner asked for a `roleId` parameter; it was implemented from
   the token instead, because a client-supplied role could be omitted to see everything (`docs/AUTH.md`). New
@@ -91,8 +93,8 @@ Nothing is half-implemented. Not started:
 
 ## Current Verification State
 
-Latest (2026-11-24, in place): `dotnet build` - **no warnings, no errors**; `dotnet test` - **170 passing**
-(154 Application + 16 Api), 0 failing.
+Latest (2026-11-24, in place): `dotnet build` - **no warnings, no errors**; `dotnet test` - **167 passing**
+(151 Application + 16 Api), 0 failing.
 
 Pipeline verification from 2026-10-05 (still the latest live run of these parts):
 - `v2/007`, `v2/008`, `v2/009` applied to **both** local tenants (`007` re-run twice - idempotent).
@@ -135,7 +137,7 @@ No blockers. Owed by the owner/product, not blocking:
    `EmailDelivery:Mode = Send`. Still pending from before: promoting `v2/006`. **`v2/010`-`v2/014` and `catalog/003` are now
    required too**: without them `GET /api/users`, every tagging list, `GET /api/roles`, `GET /api/tenants`,
    `POST`/`PUT /api/users`, `GET /api/lookups/office-locations` and `GET /api/lookups/scoped/{table}` fail; `v2/015`
-   is needed for the `ReportingLine` source.
+   (after `014`; it redefines `Lookup_GetScoped`) is needed for `vw_UserHierarchy`.
 2. 12 roles have zero `RoleActionMapping` rows (query in `docs/DATABASE.md`).
 3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
 4. **Reporting-line cycle** 12259 <-> 12475: `UserGetAll`, tagging and inquiry lists error for those callers. Fix the

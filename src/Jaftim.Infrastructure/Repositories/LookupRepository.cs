@@ -24,11 +24,6 @@ public sealed class LookupRepository(IDbExecutor db, IMemoryCache cache) : ILook
                 .With("@TableName", tableName, DbType.String)
                 .With("@RoleId", roleId, DbType.Int64), ct);
 
-    public Task<IReadOnlyList<LookupItem>> GetReportingLineAsync(long roleId, CancellationToken ct = default) =>
-        db.QueryAsync<LookupItem>(
-            SpCall.Procedure("Lookup_ReportingLine")
-                .With("@RoleId", roleId, DbType.Int64), ct);
-
     public async Task<IReadOnlySet<string>> GetAllowedTableNamesAsync(CancellationToken ct = default)
     {
         IReadOnlySet<string>? cached = await cache.GetOrCreateAsync(AllowedTablesCacheKey, async entry =>
