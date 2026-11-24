@@ -148,8 +148,8 @@ No blockers. Owed by the owner/product, not blocking:
 
 ## Next Actions
 
-0. **Apply `database/v2/014_Lookup_Scoped.sql` to UAT** (owner authorised 2026-11-20; it depends only on legacy
-   objects; `015` is not yet authorised for UAT). Blocked on credentials: none are configured for this repo. Run it with `sqlcmd -I -b`, then verify with
+0. **Apply `database/v2/014_Lookup_Scoped.sql` then `015_Lookup_RoleFilter.sql` to UAT** (owner authorised 014 on
+   2026-11-20 and 015 on 2026-11-24; both depend only on legacy objects, 015 must follow 014). Blocked on credentials: none are configured for this repo. Run it with `sqlcmd -I -b`, then verify with
    `OBJECT_DEFINITION(OBJECT_ID('dbo.Lookup_GetScoped'))` and check UAT for the 12259/12475 cycle.
 1. **Port bulk inquiry import** (`InquiryController.BulkInquirySave`) as a Hangfire job over `BulkInquiryImport_V2`
    (TVP) with progress, written the pipeline way (`IJobRunner`; notify through `INotificationDispatcher`). Start by
