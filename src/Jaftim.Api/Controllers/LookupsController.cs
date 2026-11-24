@@ -33,6 +33,18 @@ public sealed class LookupsController(ILookupService lookups) : ApiControllerBas
         Ok(await lookups.GetOfficeLocationsAsync(ct));
 
     /// <summary>
+    /// GET /api/lookups/countries - every live, active country sorted by name:
+    /// <c>[{ id, name, alpha2Code, dialCodeId, dialCode }]</c>. <c>id</c> is the user's <c>countryId</c> and the
+    /// <c>countryId</c> of <c>/api/lookups/cities</c>; <c>dialCodeId</c> (null when the country has no dial code) is
+    /// what the user endpoints take as <c>phoneCountryCodeId</c>/<c>whatsAppCountryCodeId</c>, and <c>dialCode</c> is
+    /// its text ("+92"). About 210 rows, not paged.
+    /// </summary>
+    [HttpGet("countries")]
+    [HasPermission(Permissions.AuthTable)]
+    public async Task<ActionResult<ApiResponse<IReadOnlyList<Country>>>> GetCountries(CancellationToken ct) =>
+        Ok(await lookups.GetCountriesAsync(ct));
+
+    /// <summary>
     /// GET /api/lookups/cities?countryId=84 - the cities of one country (Base_Country id, as in
     /// <c>GET /api/lookups?tables=Base_Country</c>), <c>[{ id, name }]</c> sorted by name. The id is the user's
     /// <c>cityId</c>. Not paged: the largest country has about 3,700 cities. countryId missing or 0 or less -> 422; a

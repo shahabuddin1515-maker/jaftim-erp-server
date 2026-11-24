@@ -18,6 +18,9 @@ public sealed class LookupRepository(IDbExecutor db, IMemoryCache cache) : ILook
     public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
         db.QueryAsync<OfficeLocation>(SpCall.Procedure("Lookup_OfficeLocations"), ct);
 
+    public Task<IReadOnlyList<Country>> GetCountriesAsync(CancellationToken ct = default) =>
+        db.QueryAsync<Country>(SpCall.Procedure("Lookup_Countries"), ct);
+
     // The legacy procedure returns Base_City.* - only the id and name are projected.
     public async Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default)
     {

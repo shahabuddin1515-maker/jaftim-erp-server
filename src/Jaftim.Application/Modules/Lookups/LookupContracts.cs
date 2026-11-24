@@ -18,6 +18,9 @@ public interface ILookupRepository
     /// <summary>EXEC Lookup_OfficeLocations (database/v2/013) - Base_Country rows with IsLocationCountry = 1.</summary>
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
 
+    /// <summary>EXEC Lookup_Countries (database/v2/017) - live, active countries with their dial code, by name.</summary>
+    Task<IReadOnlyList<Country>> GetCountriesAsync(CancellationToken ct = default);
+
     /// <summary>EXEC SYS_Auth_GetCity @FK_Base_Country_Id (legacy, unchanged) - the country's non-deleted cities.</summary>
     Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default);
 
@@ -32,6 +35,7 @@ public interface ILookupService
 {
     Task<IReadOnlyDictionary<string, IReadOnlyList<LookupItem>>> GetDropdownsAsync(IReadOnlyCollection<string> tableNames, CancellationToken ct = default);
     Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default);
+    Task<IReadOnlyList<Country>> GetCountriesAsync(CancellationToken ct = default);
     Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default);
     Task<IReadOnlyList<LookupItem>> GetScopedAsync(string tableName, long? roleId = null, CancellationToken ct = default);
 }
@@ -40,6 +44,9 @@ public sealed class LookupService(ILookupRepository repository) : ILookupService
 {
     public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
         repository.GetOfficeLocationsAsync(ct);
+
+    public Task<IReadOnlyList<Country>> GetCountriesAsync(CancellationToken ct = default) =>
+        repository.GetCountriesAsync(ct);
 
     /// <summary>
     /// The cities of one Base_Country, sorted by name (the legacy procedure has no order). countryId of 0 or less is

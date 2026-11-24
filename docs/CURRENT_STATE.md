@@ -20,6 +20,10 @@ No task is mid-edit. The tree is at a clean checkpoint.
 
 ## Recently Completed
 
+- **`GET /api/lookups/countries`** (2026-11-24, owner): live, active countries with alpha-2 and dial code (id + text),
+  new `database/v2/017_Lookup_Countries.sql` (both local tenants, re-run idempotent). Verified: build clean, 181 tests
+  pass (scratchpad copy); live on :5150 - 208 rows by name (`' Lebanon'` stored with a leading space, now trimmed),
+  Jamaica's id feeds `/cities` (13), anonymous 401.
 - **`GET /api/lookups/cities?countryId=`** (2026-11-24, owner): the cities of one `Base_Country`, `{ id, name }` by
   name, over the legacy `SYS_Auth_GetCity` (no database change, nothing to release). Verified: build clean, 181 tests
   pass (scratchpad copy); live on :5150 - Jamaica 13 and India 3,699 rows (= `Base_City`, 104 ms), unknown country
@@ -155,7 +159,8 @@ No blockers. Owed by the owner/product, not blocking:
    required too**: without them `GET /api/users`, every tagging list, `GET /api/roles`, `GET /api/tenants`,
    `POST`/`PUT /api/users`, `GET /api/lookups/office-locations` and `GET /api/lookups/scoped/{table}` fail; `v2/015`
    (after `014`; it redefines `Lookup_GetScoped`) is needed for `vw_UserHierarchy`. **`v2/016`** (after 010 and 012)
-   is now required by every `/api/users` call (`UserGetById_V2`, new columns in `UserSave_V2`/`UserGetAll_V2`).
+   is now required by every `/api/users` call (`UserGetById_V2`, new columns in `UserSave_V2`/`UserGetAll_V2`);
+   **`v2/017`** by `GET /api/lookups/countries`.
 2. 12 roles have zero `RoleActionMapping` rows (query in `docs/DATABASE.md`).
 3. Tagging product questions (`docs/REWRITE_PLAN.md` §7).
 4. **Reporting-line cycle** 12259 <-> 12475: `UserGetAll`, tagging and inquiry lists error for those callers. Fix the
@@ -168,8 +173,8 @@ No blockers. Owed by the owner/product, not blocking:
 
 0. **Apply `database/v2/014_Lookup_Scoped.sql` then `015_Lookup_RoleFilter.sql` to UAT** (owner authorised 014 on
    2026-11-20 and 015 on 2026-11-24; both depend only on legacy objects, 015 must follow 014). Blocked on credentials: none are configured for this repo. Run it with `sqlcmd -I -b`, then verify with
-   `OBJECT_DEFINITION(OBJECT_ID('dbo.Lookup_GetScoped'))` and check UAT for the 12259/12475 cycle. `v2/016` is not
-   yet authorised for UAT - ask the owner; it must go with this build (the user endpoints need it).
+   `OBJECT_DEFINITION(OBJECT_ID('dbo.Lookup_GetScoped'))` and check UAT for the 12259/12475 cycle. `v2/016` and
+   `v2/017` are not yet authorised for UAT - ask the owner; it must go with this build (the user endpoints need it).
 1. **Port bulk inquiry import** (`InquiryController.BulkInquirySave`) as a Hangfire job over `BulkInquiryImport_V2`
    (TVP) with progress, written the pipeline way (`IJobRunner`; notify through `INotificationDispatcher`). Start by
    reading the legacy action, the procedure and its table type, and how the legacy screen reports per-row errors.

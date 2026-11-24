@@ -26,6 +26,9 @@ public sealed class LookupServiceTests
         public Task<IReadOnlyList<OfficeLocation>> GetOfficeLocationsAsync(CancellationToken ct = default) =>
             throw new NotSupportedException();
 
+        public Task<IReadOnlyList<Country>> GetCountriesAsync(CancellationToken ct = default) =>
+            Task.FromResult<IReadOnlyList<Country>>([new Country { Id = 133, Name = "Pakistan", DialCodeId = 140, DialCode = "+92" }]);
+
         public List<long> CityCalls { get; } = [];
         public Task<IReadOnlyList<City>> GetCitiesAsync(long countryId, CancellationToken ct = default)
         {
