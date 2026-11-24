@@ -125,6 +125,22 @@ app and the reports would read 9 as Singapore and 185/186 as nothing. Until the 
 `Base_Country` ids (a data change across both apps - owner decision), the user form's office dropdown still needs
 `GET /api/lookups?tables=Base_OriginCountry`. The user endpoints do not validate the id against either list.
 
+## Reporting line
+
+The user form's "Reporting Line" dropdown fills `UserProfile.ReportsTo_UserId`. Its source is
+`GET /api/lookups/scoped/ReportingLine?roleId=<role of the user being edited>` (`Lookup_ReportingLine`,
+`database/v2/015`; legacy `SYS_Auth_GetReportingLineByRole` through `SYS_AuthMethod` keyword `GetReportingLineByRole`).
+
+- The allowed managers come from `UserHierarchy`, which is keyed on **user type**, not role:
+  role -> `Role.UserTypeId` -> `UserHierarchy.UserTypeParentId` -> every role of that type -> users whose **primary**
+  role it is. Direct parents only (owner, 2026-11-24, same as legacy). A type can have several parents: Sales
+  Executive (type 2) has Sales Manager (8) and Team Lead Sales (15). Roles `none1`-`none3` (7-9) are user type 3
+  (Customer) and get nothing. `UserReportingLines` exists but is empty and unused.
+- v2 lists only live, active users (owner, 2026-11-24); legacy also offered deleted and inactive ones. An existing
+  user whose manager is now inactive will not find that manager in the list.
+- **Not enforced on save**: `POST`/`PUT /api/users` accept any `reportsToUserId`, as legacy did. The dropdown is the
+  only guard, so a cycle (`docs/REWRITE_PLAN.md` section 7) can still be saved.
+
 ## Not ported yet
 
 `UserController.OrgChart` (`GetOrgChart`) - still `todo` in `docs/MIGRATION_INVENTORY.md`.
